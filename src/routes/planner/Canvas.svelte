@@ -13,7 +13,7 @@
 
 	function applyScale(n: number, scale: ContentCommon["scale"]) {
 		if (scale === "none") return 1;
-		if (scale === "base") return n ** -0.75;
+		if (scale === "base") return n ** -0.5;
 		unreachable(scale);
 	}
 
@@ -285,7 +285,11 @@
 
 			// Ctrl key activates fine zoom
 			if (e.ctrlKey) {
-				this.zoomInTo(clamp(this.zoom - 0.01 * Math.sign(e.deltaY), 0.1, 10), zoomX, zoomY);
+				this.zoomInTo(
+					Math.round(clamp(this.zoom - 0.01 * Math.sign(e.deltaY), 0.1, 10) * 100) / 100,
+					zoomX,
+					zoomY
+				);
 				e.preventDefault();
 				return;
 			}
@@ -449,8 +453,7 @@
 	import CanvasImage from "./CanvasImage.svelte";
 	import { applyBehaviors } from "$lib/headlessui/internal/behavior.svelte";
 	import { listenerBehavior } from "$lib/headlessui/internal/events";
-	import { SvelteMap, SvelteSet } from "svelte/reactivity";
-	import type { Transform } from "./callouts";
+	import { SvelteSet } from "svelte/reactivity";
 
 	type Props = {
 		onCreate?: (editor: Editor) => void;
@@ -521,8 +524,22 @@
 		class="absolute right-4 top-4 z-10 w-fit rounded-xl border border-gray-800 bg-gray-900"
 		onwheel={(e) => e.stopPropagation()}
 	>
-		<p class="mx-4 my-1 w-[5ch] text-center font-mono text-lg text-gray-200">
-			{(editor.zoom * 100).toFixed(0)}%
+		<p class="mx-4 my-1 font-mono text-lg text-gray-200">
+			{(editor.zoom * 100).toFixed(0)}% Zoom
+		</p>
+
+		<p class="mx-4 my-1 max-w-60 text-base text-gray-200">
+			{#snippet key(k: string)}
+				<span
+					class="rounded border-b-2 border-b-gray-500 bg-gray-700 px-2 py-px font-mono text-xs text-gray-200"
+					>{k}</span
+				>
+			{/snippet}
+			{@render key("Space")} + {@render key("L-Click")} + Drag - Pan
+			<br />
+			Scroll - Zoom
+			<br />
+			{@render key("R-Click")} - Add Item
 		</p>
 	</div>
 </div>

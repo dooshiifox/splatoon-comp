@@ -10,12 +10,12 @@
 		type MapName,
 		isMapName,
 		getStageImage,
-		CALLOUTS,
-		type MapModeLocations,
+		LOCATIONS,
 		type MapLocations,
 		GAMEMODES,
-		type Transform
-	} from "./callouts";
+		type Transform,
+		type Location
+	} from "./locations";
 	import { goto } from "$app/navigation";
 	import TW from "$lib/s3/TW.svelte";
 	import SZ from "$lib/s3/SZ.svelte";
@@ -49,7 +49,7 @@
 				goto(`?${params}`);
 			},
 			get mapInfo() {
-				return CALLOUTS[currentMap];
+				return LOCATIONS[currentMap];
 			},
 			get mode() {
 				return currentMode;
@@ -59,9 +59,8 @@
 				params.set("mode", mode);
 				goto(`?${params}`);
 			},
-			get modeInfo(): MapModeLocations | undefined {
-				// @ts-expect-error yeah its just cause its not always defined yet.
-				return CALLOUTS[currentMap].gamemodes[currentMode];
+			get modeLocations(): Array<Location> {
+				return LOCATIONS[currentMap].gamemodes[currentMode];
 			},
 			get isMinimap() {
 				return currentViewIsMinimap;
@@ -121,12 +120,9 @@
 	$effect(() => {
 		if (!editor) return;
 		const mapCombo = current.map + current.mode + untrack(() => editor?.genId());
-		const modeInfo = current.modeInfo;
-		if (!modeInfo) return;
 
-		console.log("add");
 		untrack(() => {
-			for (const location of modeInfo.locations) {
+			for (const location of current.modeLocations) {
 				if (location.type === "callout") {
 					editor?.addElement({
 						centerX: location.x,
@@ -154,26 +150,31 @@
 	$effect(() => {
 		if (!editor) return;
 		const transform =
-			current.isMinimap && current.modeInfo
-				? current.modeInfo.minimap
+			current.isMinimap && current.mapInfo.minimap
+				? current.mapInfo.minimap
 				: { rotation: 0, scale: 1, translate: { x: 0, y: 0 } };
-		console.log("transform");
+		const mapCombo = current.map + current.mode + untrack(() => editor?.genId());
 
 		untrack(() => {
 			for (const el of editor?.getElementsInGroup("items") ?? []) {
 				transformElement(el.id, transform, false);
+				el.groups.add("transform-" + mapCombo);
 			}
 		});
 
 		// Reset
 		return () =>
 			untrack(() => {
-				for (const el of editor?.getElementsInGroup("items") ?? []) {
+				for (const el of editor?.getElementsInGroup("transform-" + mapCombo) ?? []) {
 					transformElement(el.id, transform, true);
 				}
 			});
 	});
 </script>
+
+<svelte:head>
+	<title>Planning {current.mode} {current.mapInfo.name}</title>
+</svelte:head>
 
 <div class="relative h-dvh w-dvw overflow-hidden">
 	<Editor
@@ -215,10 +216,9 @@
 					use:mapDropdown.items
 					class="absolute max-h-[40rem] w-full translate-y-1 overflow-auto rounded-lg bg-gray-700 py-1 text-lg font-bold text-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none"
 				>
-					{#each Object.entries(CALLOUTS) as [id, info] (id)}
+					{#each Object.entries(LOCATIONS) as [id, info] (id)}
 						{@const isActive = mapDropdown.isActive(id as MapName)}
 						{@const isSelected = mapDropdown.isSelected(id as MapName)}
-
 						<li
 							class="flex cursor-default select-none flex-row items-center py-2 pl-2 pr-6 {isActive
 								? 'bg-slate-800 text-white'
