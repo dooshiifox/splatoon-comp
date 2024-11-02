@@ -1,3 +1,14 @@
-@import 'tailwindcss/base';
-@import 'tailwindcss/components';
-@import 'tailwindcss/utilities';
+@import "tailwindcss/base";
+@import "tailwindcss/components";
+@import "tailwindcss/utilities";
+
+@font-face {
+	font-family: SplatoonBlock;
+	src: url(/fonts/Splatoon1.ttf);
+	font-display: auto;
+}
+@font-face {
+	font-family: SplatoonText;
+	src: url(/fonts/Splatoon2.ttf);
+	font-display: auto;
+}

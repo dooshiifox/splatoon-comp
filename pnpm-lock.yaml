@@ -7,6 +7,10 @@ settings:
 importers:
 
   .:
+    dependencies:
+      albtc:
+        specifier: ^0.0.6
+        version: 0.0.6
     devDependencies:
       '@sveltejs/adapter-auto':
         specifier: ^3.0.0
@@ -553,6 +557,10 @@ packages:
 
   ajv@6.12.6:
     resolution: {integrity: sha512-j3fVLgvTo527anyYyJOGTYJbG+vnnQYvE0m5mmkc1TK+nxAppkCLMIL0aZ4dblVCNoGShhm+kzE4ZUykBoMg4g==}
+
+  albtc@0.0.6:
+    resolution: {integrity: sha512-7jrjGjQKu2PkwTt1Bchyq7b23Kk/XERQk7kr0T0HRp74porMZ37sTxbrhE8JWDqDGBNti/+4n7dyaV7bjsJV6w==}
+    engines: {node: ^18.0.0 || >=20.0.0}
 
   ansi-regex@5.0.1:
     resolution: {integrity: sha512-quJQXlTSUGL2LH9SUXo8VwsY4soanhgo6LNSm84E1LBcE8s3O0wpdiRzyR9z/ZZJMlMWv37qOOb9pdJlMUEKFQ==}
@@ -2050,6 +2058,8 @@ snapshots:
       fast-json-stable-stringify: 2.1.0
       json-schema-traverse: 0.4.1
       uri-js: 4.4.1
+
+  albtc@0.0.6: {}
 
   ansi-regex@5.0.1: {}
 
