@@ -1,0 +1,43 @@
+The following is a list of To-Do items for the planner feature.
+They are not placed in any particular order and will be done whenever i feel like adding them
+
+- text options
+  - colour
+  - size
+  - alignment
+  - font
+- images
+- live collaboration
+  - names
+  - selection colors
+  - roomcode-based
+- history
+  - undo/redo
+- drawing
+  - turn drawn images into SVG so precision isnt lost on zoom in
+  - https://bsky.app/profile/antyytna.bsky.social/post/3la2axdwshm24
+- gamemode details
+  - clam spawn locations
+  - tower/rm checkpoints
+  - common good positioning locations on map-modes for different weapons
+- main/sub/special icons
+  - drag onto map (useful for eg beakon placements, positioning, etc)
+- saving
+  - save to local storage
+  - save as file
+  - load files
+    - drag & drop too (but ask to save changes to prevent overwriting)
+- toggle items
+  - toggle callouts
+  - toggle gamemode details
+  - toggle mains/subs/specials
+  - toggle user-added content
+- light mode
+- per-map drawing
+  - so you can switch between maps while having drawn details saved
+- accurate minimap data
+  - might need to talk to a modder for this
+  - also try get tower path/SZ zone/RM checkpoint/CB baskets
+    - would be cool to be able to drag the tower along this path. could also make rainmaker/power clam/sz score icons too?
+- mobile support
+- Lemuria callouts
