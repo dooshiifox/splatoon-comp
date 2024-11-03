@@ -5,7 +5,12 @@ import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
 
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
-	preprocess: [vitePreprocess(), mdsvex()],
+	preprocess: [
+		vitePreprocess(),
+		mdsvex({
+			layout: "./src/lib/mdsvex/layout.svelte"
+		})
+	],
 
 	kit: {
 		adapter: process.env.NODE_ENV === "development" ? adapter() : adapterCloudflare()
