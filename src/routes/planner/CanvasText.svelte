@@ -50,6 +50,7 @@
 	let isSelected = $derived(editor.isElementSelected(id));
 	let isEditable = $derived(editor.isOnlyElementSelected(id));
 
+	// svelte-ignore state_referenced_locally
 	let value = $state(thisEl.content);
 	let textShadow = $derived(getHighestContrast(thisEl.color, ["#ffffff", "#000000"]));
 </script>
@@ -93,6 +94,7 @@
 <style>
 	.text-shadow {
 		--offset-amount: 1px;
+		/* -webkit-text-stroke: calc(var(--offset-amount) / var(--editor-zoom)) var(--text-shadow); */
 		text-shadow:
 			calc(var(--offset-amount) / var(--editor-zoom))
 				calc(var(--offset-amount) / var(--editor-zoom)) var(--text-shadow),

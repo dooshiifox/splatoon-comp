@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { createMenu, Transition } from "$lib/headlessui";
-	import Check from "$lib/icons/Check.svelte";
 	import { SvelteSet } from "svelte/reactivity";
 	import { getEditorContext } from "./Canvas.svelte";
 

@@ -17,6 +17,7 @@
 	let startedLoadingAt = $state<number | null>(Date.now());
 	let shouldFade = $state(true);
 
+	// svelte-ignore non_reactive_update
 	let index = 0;
 	$effect(() => {
 		// eslint-disable-next-line @typescript-eslint/no-unused-expressions

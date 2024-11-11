@@ -1,5 +1,6 @@
 <script lang="ts">
-	import Canvas, { Editor } from "./Canvas.svelte";
+	import Canvas from "./Canvas.svelte";
+	import type { Editor } from "./editor.svelte";
 
 	type Props = {
 		onCreate?: (editor: Editor) => void;

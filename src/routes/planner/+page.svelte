@@ -22,7 +22,7 @@
 	import TC from "$lib/s3/TC.svelte";
 	import RM from "$lib/s3/RM.svelte";
 	import CB from "$lib/s3/CB.svelte";
-	import type { Editor as TEditor } from "./Canvas.svelte";
+	import type { Editor as TEditor } from "./editor.svelte";
 	import { untrack } from "svelte";
 	import { SvelteSet } from "svelte/reactivity";
 
