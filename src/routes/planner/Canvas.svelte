@@ -14,7 +14,8 @@
 	import CanvasImage from "./CanvasImage.svelte";
 	import { applyBehaviors } from "$lib/headlessui/internal/behavior.svelte";
 	import { listenerBehavior } from "$lib/headlessui/internal/events";
-	import { Editor } from "./editor.svelte";
+	import { Editor, RENDER_TOUCH_POINTS } from "./editor.svelte";
+	import { dev } from "$app/environment";
 
 	type Props = {
 		onCreate?: (editor: Editor) => void;
@@ -46,6 +47,10 @@
 			listenerBehavior("mousemove", editor.onMouseMove.bind(editor)),
 			listenerBehavior("mousedown", editor.onMouseDown.bind(editor)),
 			listenerBehavior("mouseup", editor.onMouseUp.bind(editor)),
+			listenerBehavior("touchmove", editor.onTouchMove.bind(editor)),
+			listenerBehavior("touchstart", editor.onTouchDown.bind(editor)),
+			listenerBehavior("touchend", editor.onTouchUp.bind(editor)),
+			listenerBehavior("touchcancel", editor.onTouchUp.bind(editor)),
 			listenerBehavior("contextmenu", editor.onContextMenu.bind(editor)),
 			listenerBehavior("wheel", editor.onWheel.bind(editor), { passive: false })
 		]);
@@ -79,10 +84,34 @@
 		{/each}
 	</div>
 
+	{#if dev && RENDER_TOUCH_POINTS}
+		{#each editor.touchPoints.points as [, touchPoint] (touchPoint.identifier)}
+			{@const diffX = touchPoint.start.x - touchPoint.current.x}
+			{@const diffY = touchPoint.start.y - touchPoint.current.y}
+			<div
+				class="absolute size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-500"
+				style:left="{touchPoint.current.x}px"
+				style:top="{touchPoint.current.y}px"
+			></div>
+			<div
+				class="absolute size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-lime-500"
+				style:left="{touchPoint.start.x}px"
+				style:top="{touchPoint.start.y}px"
+			></div>
+			<div
+				class="absolute h-px origin-top-left bg-purple-500"
+				style:left="{touchPoint.current.x}px"
+				style:top="{touchPoint.current.y}px"
+				style:width="{Math.hypot(diffX, diffY)}px"
+				style:transform="rotate({Math.atan2(diffY, diffX)}rad)"
+			></div>
+		{/each}
+	{/if}
+
 	<EditorContextMenu />
 
 	<div
-		class="absolute right-4 top-4 z-10 w-fit rounded-xl border border-gray-800 bg-gray-900"
+		class="absolute right-4 top-4 z-10 hidden w-fit rounded-xl border border-gray-800 bg-gray-900 md:block"
 		onwheel={(e) => e.stopPropagation()}
 	>
 		<p class="mx-4 my-1 font-mono text-lg text-gray-200">

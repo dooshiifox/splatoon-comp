@@ -11,10 +11,10 @@
 	let clientHeight = $state(0);
 </script>
 
-<div class="fixed inset-0 bg-gray-950" bind:clientWidth bind:clientHeight>
+<div class="h-full w-full bg-gray-950" bind:clientWidth bind:clientHeight>
 	{#if clientWidth === 0 || clientHeight === 0}
 		<div class="absolute inset-0 flex items-center justify-center">
-			<p class="text-3xl font-bold text-slate-100">Loading...</p>
+			<p class="text-3xl font-bold text-slate-100">Loading... {clientWidth} {clientHeight}</p>
 		</div>
 	{:else}
 		<Canvas {onCreate} width={clientWidth} height={clientHeight} />

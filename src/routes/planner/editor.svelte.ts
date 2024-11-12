@@ -1,5 +1,7 @@
+import { dev } from "$app/environment";
+import { uuid } from "$lib/uuid";
 import { copyText, unreachable, type OptionalKeys } from "albtc";
-import { SvelteSet } from "svelte/reactivity";
+import { SvelteMap, SvelteSet } from "svelte/reactivity";
 
 function clamp(num: number, min: number, max: number) {
 	return Math.max(min, Math.min(max, num));
@@ -199,6 +201,7 @@ export class Editor {
 		}
 	}
 
+	touchPoints = new TouchPoints();
 	/** Fired when a mouse button is pressed down. */
 	onMouseDown(e: MouseEvent) {
 		if (e.button === 0) {
@@ -232,6 +235,17 @@ export class Editor {
 			this.isPanning = true;
 		}
 	}
+	/** Fired when a touch button is pressed down. */
+	onTouchDown(e: TouchEvent) {
+		if (window.lockTouch === true) {
+			this.touchPoints.keptTouches.push(e.touches.item(0)?.identifier ?? 0);
+		}
+		this.touchPoints.updatePoints(e.touches);
+		this.isPanning = this.touchPoints.length === 1;
+		if (this.touchPoints.length === 2) {
+			this.startPinchZoomLevel = this.zoom;
+		}
+	}
 	/** Fired when the user moves their mouse. */
 	onMouseMove(e: MouseEvent) {
 		if (this.isPanning) {
@@ -251,6 +265,41 @@ export class Editor {
 
 		this.mouseScreenX = e.clientX;
 		this.mouseScreenY = e.clientY;
+	}
+	startPinchZoomLevel = 1;
+	/** Fired when the user drags the screen. */
+	onTouchMove(e: TouchEvent) {
+		this.touchPoints.updatePoints(e.touches);
+		if (this.isPanning) {
+			const delta = this.touchPoints.getPoints()[0]?.delta ?? {
+				x: 0,
+				y: 0,
+				force: 0,
+				rotationAngle: 0
+			};
+			this.offsetX -= delta.x / this.zoom;
+			this.offsetY -= delta.y / this.zoom;
+		} else if (this.touchPoints.length === 2) {
+			// User is probably trying to zoom in
+			const [pointA, pointB] = this.touchPoints.getPoints();
+			// Get the mid point
+			const midX = this.toCanvasSpaceX((pointA.current.x + pointB.current.x) / 2);
+			const midY = this.toCanvasSpaceY((pointA.current.y + pointB.current.y) / 2);
+			// How much did we zoom in by?
+			const currentDistance = Math.hypot(
+				pointA.current.x - pointB.current.x,
+				pointA.current.y - pointB.current.y
+			);
+			const startDistance = Math.hypot(
+				pointA.start.x - pointB.start.x,
+				pointA.start.y - pointB.start.y
+			);
+			const zoomPercentage = (currentDistance - startDistance) / startDistance;
+			const newZoom = (1 + zoomPercentage) * this.startPinchZoomLevel;
+
+			this.zoomInTo(newZoom, midX, midY);
+		}
+	}
 	/** Fired when a mouse button is released. */
 	onMouseUp(e: MouseEvent) {
 		if (e.button === 0) {
@@ -260,6 +309,13 @@ export class Editor {
 			this.mayBeDraggingSelectedElements = false;
 		} else if (e.button === 1) {
 			this.isPanning = false;
+		}
+	}
+	/** Fired when a touch button is released. */
+	onTouchUp(e: TouchEvent) {
+		this.touchPoints.updatePoints(e.touches);
+		this.isPanning = this.touchPoints.length === 1;
+	}
 	/** Fired when the user uses right-click. */
 	onContextMenu(e: MouseEvent) {
 		this.openContextMenu();
@@ -341,7 +397,7 @@ export class Editor {
 
 	/** Generates a new ID. */
 	genId(): string {
-		return crypto.randomUUID();
+		return uuid();
 	}
 	/** Adds an element to the canvas.
 	 *
@@ -428,5 +484,114 @@ export class Editor {
 	getScale(id: string) {
 		const el = this.getElement(id);
 		return applyScale(this.zoom, el?.scale ?? "base");
+	}
+}
+
+export const RENDER_TOUCH_POINTS = false;
+const TOUCH_POINTS_MAP = RENDER_TOUCH_POINTS && dev ? SvelteMap : Map;
+
+type TouchPoint = {
+	/** Same as the key. */
+	identifier: number;
+	start: {
+		x: number;
+		y: number;
+		force: number;
+		rotationAngle: number;
+	};
+	current: {
+		x: number;
+		y: number;
+		force: number;
+		rotationAngle: number;
+	};
+	/** The amount of change since the last time `updatePoints` was called. */
+	delta: {
+		x: number;
+		y: number;
+		force: number;
+		rotationAngle: number;
+	};
+};
+class TouchPoints {
+	points = new TOUCH_POINTS_MAP<number, TouchPoint>();
+
+	/** For debugging purposes, allows you to specify points which do not disappear. */
+	keptTouches: Array<number> = [];
+
+	/** Updates the list of current touches. */
+	updatePoints(touches: TouchList) {
+		// Remove any that arent in the list
+		// "*gasp* it's O(n^2)" how many points are there going to be where it matters
+		pointLoop: for (const [identifier] of this.points) {
+			if (this.keptTouches.includes(identifier)) {
+				continue pointLoop;
+			}
+
+			// touchlist doesnt support stuff like `Array.any`
+			for (const touch of touches) {
+				if (touch.identifier === identifier) {
+					continue pointLoop;
+				}
+			}
+
+			// Not in the new touch list, remove it
+			this.points.delete(identifier);
+		}
+
+		// Add or update everything in the touch list
+		for (const touch of touches) {
+			const current = {
+				x: touch.clientX,
+				y: touch.clientY,
+				force: touch.force,
+				rotationAngle: touch.rotationAngle
+			};
+
+			const previous = this.points.get(touch.identifier);
+			if (previous) {
+				// Update
+				this.points.set(touch.identifier, {
+					...previous,
+					current,
+					delta: {
+						x: current.x - previous.current.x,
+						y: current.y - previous.current.y,
+						force: current.force - previous.current.force,
+						rotationAngle: current.rotationAngle - previous.current.rotationAngle
+					}
+				});
+			} else {
+				// New touch
+				this.points.set(touch.identifier, {
+					identifier: touch.identifier,
+					start: current,
+					current,
+					delta: {
+						x: 0,
+						y: 0,
+						force: 0,
+						rotationAngle: 0
+					}
+				});
+			}
+		}
+	}
+
+	/** Returns the current points. */
+	getPoints(): Array<TouchPoint> {
+		return Array.from(this.points.values());
+	}
+
+	/** `for (const point of <TouchPoints instance>)` implementation. */
+	*[Symbol.iterator](): Iterable<TouchPoint> {
+		for (const point of this.points.values()) {
+			yield point;
+		}
+	}
+
+	/** The number of currently-registered points. */
+	get length(): number {
+		return this.points.size;
 	}
 }

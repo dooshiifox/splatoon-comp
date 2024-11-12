@@ -193,7 +193,7 @@
 	/>
 
 	<div
-		class="absolute left-4 top-4 z-10 w-80 rounded-xl border border-gray-800 bg-gray-900"
+		class="absolute left-0 right-0 top-0 z-10 border-b border-gray-800 bg-gray-900 md:left-4 md:top-4 md:w-80 md:rounded-xl md:border"
 		onwheel={(e) => e.stopPropagation()}
 	>
 		<div class="relative z-10 m-2">
@@ -201,7 +201,7 @@
 				class="flex w-full flex-col rounded-lg bg-gray-800 px-6 py-1 text-left hover:bg-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
 				use:mapDropdown.button
 			>
-				<p class="text-lg font-bold text-white">
+				<p class="text-base font-bold text-white md:text-lg">
 					{mapDropdown.selected[0].name}
 				</p>
 			</button>
@@ -214,7 +214,7 @@
 			>
 				<ul
 					use:mapDropdown.items
-					class="absolute max-h-[40rem] w-full translate-y-1 overflow-auto rounded-lg bg-gray-700 py-1 text-lg font-bold text-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none"
+					class="absolute max-h-[min(40rem,80dvh)] w-full translate-y-1 overflow-auto rounded-lg bg-gray-700 py-1 text-base font-bold text-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none md:text-lg"
 				>
 					{#each Object.entries(LOCATIONS) as [id, info] (id)}
 						{@const isActive = mapDropdown.isActive(id as MapName)}
@@ -239,45 +239,49 @@
 			</Transition>
 		</div>
 
-		<fieldset class="m-2 mt-0 flex flex-row gap-2">
-			{#each GAMEMODES as gamemode}
-				<div class="relative aspect-square flex-1">
-					<input
-						id={gamemode}
-						class="peer absolute h-0 w-0 opacity-0"
-						type="radio"
-						bind:group={current.mode}
-						name="mode"
-						value={gamemode}
-					/>
-					<label
-						for={gamemode}
-						class="relative flex h-full cursor-pointer items-center rounded-lg p-2 outline-none peer-checked:bg-slate-800 peer-hover:bg-slate-700 peer-focus-visible:ring-2 peer-focus-visible:ring-blue-400"
-					>
-						{#if gamemode === "TW"}
-							<TW class="w-full" />
-						{:else if gamemode === "SZ"}
-							<SZ class="w-full" />
-						{:else if gamemode === "TC"}
-							<TC class="w-full" />
-						{:else if gamemode === "RM"}
-							<RM class="w-full" />
-						{:else if gamemode === "CB"}
-							<CB class="w-full" />
-						{/if}
-					</label>
-				</div>
-			{/each}
-		</fieldset>
+		<div class="m-2 mt-0 flex flex-row justify-between md:flex-col">
+			<fieldset class="flex flex-row md:gap-2">
+				{#each GAMEMODES as gamemode}
+					<div class="relative aspect-square flex-1">
+						<input
+							id={gamemode}
+							class="peer absolute h-0 w-0 opacity-0"
+							type="radio"
+							bind:group={current.mode}
+							name="mode"
+							value={gamemode}
+						/>
+						<label
+							for={gamemode}
+							class="relative flex h-full cursor-pointer items-center rounded-lg p-2 outline-none peer-checked:bg-slate-800 peer-hover:bg-slate-700 peer-focus-visible:ring-2 peer-focus-visible:ring-blue-400"
+						>
+							{#if gamemode === "TW"}
+								<TW class="w-full" />
+							{:else if gamemode === "SZ"}
+								<SZ class="w-full" />
+							{:else if gamemode === "TC"}
+								<TC class="w-full" />
+							{:else if gamemode === "RM"}
+								<RM class="w-full" />
+							{:else if gamemode === "CB"}
+								<CB class="w-full" />
+							{/if}
+						</label>
+					</div>
+				{/each}
+			</fieldset>
 
-		<div class="mx-4 my-2 flex w-full items-center">
-			<input
-				id="minimap"
-				type="checkbox"
-				class="size-5 rounded bg-slate-200 text-blue-500"
-				bind:checked={current.isMinimap}
-			/>
-			<label for="minimap" class="flex-1 pl-4 text-lg font-bold text-gray-200">Minimap</label>
+			<div class="mx-4 my-2 flex items-center md:w-full">
+				<input
+					id="minimap"
+					type="checkbox"
+					class="size-5 rounded bg-slate-200 text-blue-500"
+					bind:checked={current.isMinimap}
+				/>
+				<label for="minimap" class="hidden flex-1 pl-4 text-lg font-bold text-gray-200 md:inline"
+					>Minimap</label
+				>
+			</div>
 		</div>
 	</div>
 </div>
