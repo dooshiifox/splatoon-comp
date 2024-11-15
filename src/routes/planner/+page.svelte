@@ -473,7 +473,7 @@
 
 			<a href="https://bsky.app/profile/dooshii.dev" target="_blank" class="size-8 p-1"
 				><img
-					src="https://github.com/bluesky-social/social-app/blob/main/assets/favicon.png?raw=true"
+					src="https://raw.githubusercontent.com/bluesky-social/social-app/refs/heads/main/assets/favicon.png"
 					class="size-full"
 					alt="Bluesky Logo"
 				/></a
