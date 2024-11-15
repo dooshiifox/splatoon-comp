@@ -1,30 +1,67 @@
-The following is a list of To-Do items for the planner feature.
-They are not placed in any particular order and will be done whenever i feel like adding them
+The following is a list of to-do items for the planner feature. They are not placed in any particular order and will be done whenever i feel like adding them.
+
+Contributions on [GitHub](https://github.com/dooshiifox/splatoon-comp) would be greatly appreciated. If you want to contact me for feature requests or bug reporting or something else, the [GitHub issues tab](https://github.com/dooshiifox/splatoon-comp/issues), my [Bluesky](https://bsky.app/profile/dooshii.dev), or my Discord (@dooshii) is the best way to do this.
 
 - text options
   - colour
   - size
+  - scale (relative to zoom)
   - alignment
   - font
+  - background
+    - colour/opacity
+    - blur
 - images
+  - optional alt text
+  - rescale
+  - scale (relative to zoom)
+  - outlines
+  - associated text
+    - normal text options
+    - position relative to image
+      - above, below, center
 - live collaboration
   - names
-  - selection colors
-  - roomcode-based
+  - selection colors for each user
+  - user-hosted
+    - user downloads a python script and runs it which hosts a websocket server
+    - collaborators type in the host's IP and join that way
+      - can also pick color and name?
+  - different state per mapmode
+  - server can change access level (view/edit/host)
+  - server can change whether people can join/IP addresses that can join
+  - users with host access basically have web UI of the server
+  - implementation details
+    - server handles current state of the editors
+    - on join
+      - announce to clients new person joined
+      - give user default access level (readonly or edit)
+    - on mapmode change, get current state of editor from server
+    - on change, send change to clients
+    - when user tries to undo, check no editors are currently selecting it and that this user was the last to edit it
 - history
-  - undo/redo
+  - implementation details
+    - append an undo/redo task into the history
+    - make the history a tree? that way if you accidentally perform an action while editing history you can redo into a different branch
 - drawing
   - turn drawn images into SVG so precision isnt lost on zoom in
+    - able to edit the SVG path
+    - change the stroke colour/width/style and fill colour/style
   - https://bsky.app/profile/antyytna.bsky.social/post/3la2axdwshm24
 - gamemode details
   - clam spawn locations
   - tower/rm checkpoints
   - common good positioning locations on map-modes for different weapons
+    - opinionated but i think it could be helpful for learning weapons
+    - https://drive.google.com/drive/u/0/folders/18DJQyzQX8uyQclkWDmo30MZCa9egrZ7w
 - main/sub/special icons
   - drag onto map (useful for eg beakon placements, positioning, etc)
+  - make act like regular images
+    - maybe just add a group so they can be identified?
 - saving
   - save to local storage
   - save as file
+    - json with compression?
   - load files
     - drag & drop too (but ask to save changes to prevent overwriting)
 - toggle items
@@ -37,7 +74,18 @@ They are not placed in any particular order and will be done whenever i feel lik
   - so you can switch between maps while having drawn details saved
 - accurate minimap data
   - might need to talk to a modder for this
-  - also try get tower path/SZ zone/RM checkpoint/CB baskets
+  - this is so you could rotate and zoom in on the minimap in 3d space
+  - also so text and icons on the overhead map can be put in the same locations on the minimap (and vice-versa)
+    - e.g. drawing a zone on the minimap and seeing it in the same place on the overhead map!
+  - also try get TC path/SZ zone/RM checkpoint/CB baskets/Clam spawns
     - would be cool to be able to drag the tower along this path. could also make rainmaker/power clam/sz score icons too?
+      - e.g. "If SZ score gets to this we change our strategy to do X"
 - mobile support
+  - MS office-esque ribbon to swap between different tabs
+    - map
+    - command palette
+    - tools
+    - collab
+    - save/load
+    - host
 - Lemuria callouts

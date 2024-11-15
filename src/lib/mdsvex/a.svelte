@@ -5,10 +5,7 @@
 	let { children, href }: Props = $props();
 </script>
 
-<a
-	class="relative mr-4 font-sans text-lg text-blue-400 visited:text-indigo-400"
-	{href}
-	target="_blank"
+<a class="relative mr-4 font-sans text-blue-400 visited:text-indigo-400" {href} target="_blank"
 	><span class="underline">{@render children()}</span>
 	<svg
 		xmlns="http://www.w3.org/2000/svg"

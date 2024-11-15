@@ -30,6 +30,7 @@
 	import { strAfter, strStartsWith } from "$lib";
 	import { unreachable } from "albtc";
 	import { queryParameters } from "sveltekit-search-params";
+	import A from "$lib/mdsvex/a.svelte";
 
 	function getCurrentSelected() {
 		const params = queryParameters({
@@ -451,4 +452,41 @@
 			</ul>
 		</div>
 	{/if}
+
+	<div
+		class="absolute bottom-2 right-2 z-10 rounded-xl border border-gray-800 bg-gray-900 px-6 py-2 shadow-md md:bottom-4 md:right-4"
+	>
+		<p class="mx-auto mb-2 w-fit text-base text-gray-200">
+			In Alpha. <A href="/planner/todo">View To-Do list</A>
+		</p>
+		<div class="flex flex-row items-center *:shrink-0">
+			<a href="https://github.com/dooshiifox/splatoon-comp" target="_blank" class="size-8 p-0.5">
+				<svg viewBox="0 0 24 24" class="fill-white">
+					<title>Github Logo</title>
+					<path
+						d="M12.5.75C6.146.75 1 5.896 1 12.25c0 5.089 3.292 9.387 7.863 10.91.575.101.79-.244.79-.546 0-.273-.014-1.178-.014-2.142-2.889.532-3.636-.704-3.866-1.35-.13-.331-.69-1.352-1.18-1.625-.402-.216-.977-.748-.014-.762.906-.014 1.553.834 1.769 1.179 1.035 1.74 2.688 1.25 3.349.948.1-.747.402-1.25.733-1.538-2.559-.287-5.232-1.279-5.232-5.678 0-1.25.445-2.285 1.178-3.09-.115-.288-.517-1.467.115-3.048 0 0 .963-.302 3.163 1.179.92-.259 1.897-.388 2.875-.388.977 0 1.955.13 2.875.388 2.2-1.495 3.162-1.179 3.162-1.179.633 1.581.23 2.76.115 3.048.733.805 1.179 1.825 1.179 3.09 0 4.413-2.688 5.39-5.247 5.678.417.36.776 1.05.776 2.128 0 1.538-.014 2.774-.014 3.162 0 .302.216.662.79.547C20.709 21.637 24 17.324 24 12.25 24 5.896 18.854.75 12.5.75Z"
+					></path>
+				</svg>
+			</a>
+
+			<div class="mx-3 h-5 w-0.5 bg-gray-600"></div>
+
+			<a href="https://bsky.app/profile/dooshii.dev" target="_blank" class="size-8 p-1"
+				><img
+					src="https://github.com/bluesky-social/social-app/blob/main/assets/favicon.png?raw=true"
+					class="size-full"
+					alt="Bluesky Logo"
+				/></a
+			>
+
+			<div class="mx-3 h-5 w-0.5 bg-gray-600"></div>
+
+			<img
+				src="https://cdn.prod.website-files.com/6257adef93867e50d84d30e2/636e0a6ca814282eca7172c6_icon_clyde_white_RGB.svg"
+				class="size-6"
+				alt="Discord Logo"
+			/>
+			<p class="ml-2 text-sm text-gray-200">@dooshii</p>
+		</div>
+	</div>
 </div>
