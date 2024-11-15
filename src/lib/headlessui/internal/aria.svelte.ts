@@ -42,7 +42,7 @@ export function ariaBehavior(
 
 export function reflectAriaActivedescendent(store: List<Item>): Behavior {
 	return ariaBehavior("aria-activedescendant", () =>
-		store.active === null ? "" : store.items[store.active]?.id ?? ""
+		store.active === null ? "" : (store.items[store.active]?.id ?? "")
 	);
 }
 
@@ -84,14 +84,10 @@ export function reflectAriaSelected<T extends Item>(
 	store: Selectable<T>,
 	value: ListItem<T>
 ): Behavior {
-	return ariaBehavior("aria-selected", () =>
-		isKeySelected(store.selected, getKey(value.value))
-	);
+	return ariaBehavior("aria-selected", () => isKeySelected(store.selected, getKey(value.value)));
 }
 
-export function reflectAriaMultiselectable(store: {
-	readonly multi: boolean;
-}): Behavior {
+export function reflectAriaMultiselectable(store: { readonly multi: boolean }): Behavior {
 	return ariaBehavior("aria-multiselectable", () => store.multi);
 }
 
@@ -113,10 +109,7 @@ export function setTabIndex(index = -1): Behavior {
 	};
 }
 
-export function setInputValue(
-	node: HTMLInputElement,
-	value: string | undefined
-) {
+export function setInputValue(node: HTMLInputElement, value: string | undefined) {
 	if (value !== undefined && value !== "") {
 		node.value = value;
 	}
@@ -129,9 +122,7 @@ export function reflectSelectedValueOnClose<T extends Item>(
 	return createWatchBehavior((node) => {
 		setInputValue(
 			node as HTMLInputElement,
-			selector(
-				store.expanded || store.selected.length === 0 ? null : store.selected
-			)
+			selector(store.expanded || store.selected.length === 0 ? null : store.selected)
 		);
 	});
 }

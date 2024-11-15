@@ -35,6 +35,13 @@ type ContentImage = {
 	url: string;
 };
 
+function canAcceptKeyboardEvents(e: KeyboardEvent) {
+	return (
+		(e.target as HTMLElement).nodeName.toLowerCase() !== "textarea" &&
+		(e.target as HTMLElement).nodeName.toLowerCase() !== "input"
+	);
+}
+
 type EditorEvent = {
 	"context-menu-open": [{ x: number; y: number }];
 	"context-menu-close": [];
@@ -133,30 +140,37 @@ export class Editor {
 
 	/** Fired when a key is pressed down. */
 	onKeyDown(e: KeyboardEvent) {
-		if ((e.target as HTMLElement).nodeName === "textarea") return;
+		if (!canAcceptKeyboardEvents(e)) return;
 
 		if (e.code === "Space") {
 			this.isSpaceDown = true;
 			this.isPanning = this.isLeftMouseDown;
+			e.preventDefault();
+			e.stopImmediatePropagation();
 		} else if (e.code === "Delete") {
 			this.selected.forEach((v) => this.deleteElement(v));
+			e.preventDefault();
+			e.stopImmediatePropagation();
 		} else {
 			this.onKeyPress(e);
 		}
 	}
 	/** Fired when a key is held down. */
 	onKeyPress(e: KeyboardEvent) {
-		if ((e.target as HTMLElement).nodeName === "textarea") return;
+		if (!canAcceptKeyboardEvents(e)) return;
 
 		if (e.code === "Equal" && e.ctrlKey) {
 			this.zoomInTo(this.getNextZoomLevel(-1), this.offsetX, this.offsetY);
 			e.preventDefault();
+			e.stopImmediatePropagation();
 		} else if (e.code === "Minus" && e.ctrlKey) {
 			this.zoomInTo(this.getNextZoomLevel(1), this.offsetX, this.offsetY);
 			e.preventDefault();
+			e.stopImmediatePropagation();
 		} else if (e.code === "Digit0" && e.ctrlKey) {
 			this.zoomInTo(1, this.offsetX, this.offsetY);
 			e.preventDefault();
+			e.stopImmediatePropagation();
 		} else if (e.code === "KeyC" && e.ctrlKey && e.shiftKey) {
 			copyText(
 				JSON.stringify(
@@ -174,9 +188,11 @@ export class Editor {
 				)
 			);
 			e.preventDefault();
+			e.stopImmediatePropagation();
 		} else if (e.code === "KeyC" && e.ctrlKey) {
 			copyText(JSON.stringify([...this.selected].map((id) => this.getElement(id))));
 			e.preventDefault();
+			e.stopImmediatePropagation();
 		} else if (e.code === "KeyV" && e.ctrlKey) {
 			navigator.clipboard.readText().then((text) => {
 				const arr = JSON.parse(text);
@@ -184,16 +200,21 @@ export class Editor {
 					this.addElement(item);
 				}
 			});
+			e.preventDefault();
+			e.stopImmediatePropagation();
 		} else if (e.code === "KeyA" && e.ctrlKey) {
 			// Select all elements
 			for (const el of Object.values(this.elements)) {
 				if (el.selectable) this.selectElement(el.id);
 			}
 			e.preventDefault();
+			e.stopImmediatePropagation();
 		}
 	}
 	/** Fired when a key is released. */
 	onKeyUp(e: KeyboardEvent) {
+		if (!canAcceptKeyboardEvents(e)) return;
+
 		if (e.code === "Space") {
 			this.isSpaceDown = false;
 			// Press space but left mouse is still down, allow user to still pan
@@ -324,6 +345,10 @@ export class Editor {
 
 	/** Fired when the user scrolls their scroll wheel. */
 	onWheel(e: WheelEvent) {
+		if (!e.target || !this.conf.canvasEl?.contains(e.target as Node)) {
+			return;
+		}
+
 		const zoomX = e.shiftKey ? this.offsetX : this.mouseX;
 		const zoomY = e.shiftKey ? this.offsetY : this.mouseY;
 

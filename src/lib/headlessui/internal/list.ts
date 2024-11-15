@@ -11,16 +11,12 @@ import type {
 } from "./types";
 
 /** Returns the unique(?) key from an item. */
-export function getKey<T extends Item>(item: T): ItemKey<T> {
+export function getKey<T extends Item>(item: T | ItemKey<T>): ItemKey<T> {
 	return typeof item === "object" ? item.key : item;
 }
 /** Compares two list items to see if they are equal. */
 export function itemsEqual<T extends Item>(a: T, b: T) {
-	if (typeof a === "object" && typeof b === "object") {
-		return a.key === b.key;
-	}
-
-	return a === b;
+	return getKey(a) === getKey(b);
 }
 
 /** Returns a new list with the given node removed. */

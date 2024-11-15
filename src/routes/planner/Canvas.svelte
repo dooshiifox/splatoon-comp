@@ -41,7 +41,7 @@
 	$effect(() => {
 		if (canvasEl === undefined) return;
 		return applyBehaviors(canvasEl, [
-			listenerBehavior("keydown", editor.onKeyDown.bind(editor)),
+			listenerBehavior("keydown", editor.onKeyDown.bind(editor), { passive: false }),
 			listenerBehavior("keypress", editor.onKeyPress.bind(editor), { passive: false }),
 			listenerBehavior("keyup", editor.onKeyUp.bind(editor)),
 			listenerBehavior("mousemove", editor.onMouseMove.bind(editor)),
@@ -109,29 +109,6 @@
 	{/if}
 
 	<EditorContextMenu />
-
-	<div
-		class="absolute right-4 top-4 z-10 hidden w-fit rounded-xl border border-gray-800 bg-gray-900 md:block"
-		onwheel={(e) => e.stopPropagation()}
-	>
-		<p class="mx-4 my-1 font-mono text-lg text-gray-200">
-			{(editor.zoom * 100).toFixed(0)}% Zoom
-		</p>
-
-		<p class="mx-4 my-1 max-w-60 text-base text-gray-200">
-			{#snippet key(k: string)}
-				<span
-					class="rounded border-b-2 border-b-gray-500 bg-gray-700 px-2 py-px font-mono text-xs text-gray-200"
-					>{k}</span
-				>
-			{/snippet}
-			{@render key("Space")} + {@render key("L-Click")} + Drag - Pan
-			<br />
-			Scroll - Zoom
-			<br />
-			{@render key("R-Click")} - Add Item
-		</p>
-	</div>
 </div>
 
 <style>

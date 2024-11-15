@@ -2,6 +2,7 @@ export type Url = string;
 export type AllLocations = Record<string, MapLocations>;
 export type MapLocations = {
 	name: string;
+	alias: Array<string>;
 	id: number;
 	minimap: Transform;
 	gamemodes: {
@@ -47,6 +48,7 @@ export function getStageImage(stageId: number, gamemode: Gamemode, minimap: bool
 export const LOCATIONS = {
 	ScorchGorge: {
 		name: "Scorch Gorge",
+		alias: ["Scorch", "Gorge", "SG", "SCG"],
 		id: 0,
 		minimap: {
 			rotation: -60,
@@ -148,6 +150,7 @@ export const LOCATIONS = {
 	},
 	EeltailAlley: {
 		name: "Eeltail Alley",
+		alias: ["Eeltail", "Alley", "EA", "ETA"],
 		id: 1,
 		minimap: {
 			rotation: -40,
@@ -249,6 +252,7 @@ export const LOCATIONS = {
 	},
 	HagglefishMarket: {
 		name: "Hagglefish Market",
+		alias: ["Hagglefish", "Market", "HM", "HFM"],
 		id: 2,
 		minimap: {
 			rotation: -25,
@@ -337,6 +341,7 @@ export const LOCATIONS = {
 	},
 	UndertowSpillway: {
 		name: "Undertow Spillway",
+		alias: ["Undertow", "Spillway", "UT", "UTS"],
 		id: 3,
 		minimap: {
 			rotation: -45,
@@ -442,6 +447,7 @@ export const LOCATIONS = {
 	},
 	MincemeatMetalworks: {
 		name: "Mincemeat Metalworks",
+		alias: ["Mincemeat", "Metalworks", "MM", "MMM"],
 		id: 4,
 		minimap: {
 			rotation: -45,
@@ -540,6 +546,7 @@ export const LOCATIONS = {
 	},
 	HammerheadBridge: {
 		name: "Hammerhead Bridge",
+		alias: ["Hammerhead", "Bridge", "HB", "HHB"],
 		id: 5,
 		minimap: {
 			rotation: -50,
@@ -632,6 +639,7 @@ export const LOCATIONS = {
 	},
 	MuseumDAlfonsino: {
 		name: "Museum d'Alfonsino",
+		alias: ["Museum", "MU", "MUS"],
 		id: 6,
 		minimap: {
 			rotation: -60,
@@ -739,6 +747,7 @@ export const LOCATIONS = {
 	},
 	MahiMahiResort: {
 		name: "Mahi-Mahi Resort",
+		alias: ["Mahi", "MahiMahi", "Mahi-Mahi", "Resort", "MR", "MMR"],
 		id: 7,
 		minimap: {
 			rotation: -45,
@@ -820,6 +829,7 @@ export const LOCATIONS = {
 	},
 	InkblotArtAcademy: {
 		name: "Inkblot Art Academy",
+		alias: ["Inkblot", "Academy", "IA", "IAA"],
 		id: 8,
 		minimap: {
 			rotation: -70,
@@ -933,6 +943,7 @@ export const LOCATIONS = {
 	},
 	SturgeonShipyard: {
 		name: "Sturgeon Shipyard",
+		alias: ["Sturgeon", "Shipyard", "SS", "SSY"],
 		id: 9,
 		minimap: {
 			rotation: -30,
@@ -1045,6 +1056,7 @@ export const LOCATIONS = {
 	},
 	MakoMart: {
 		name: "MakoMart",
+		alias: ["Mako", "MK", "MKM"],
 		id: 10,
 		minimap: {
 			rotation: -45,
@@ -1144,6 +1156,7 @@ export const LOCATIONS = {
 	},
 	WahooWorld: {
 		name: "Wahoo World",
+		alias: ["Wahoo", "WW", "WHW"],
 		id: 11,
 		minimap: {
 			rotation: -40,
@@ -1237,6 +1250,7 @@ export const LOCATIONS = {
 	},
 	FlounderHeights: {
 		name: "Flounder Heights",
+		alias: ["Flounder", "Apartments", "Heights", "FH", "FLH"],
 		id: 12,
 		minimap: {
 			rotation: -65,
@@ -1331,6 +1345,7 @@ export const LOCATIONS = {
 	},
 	BrinewaterSprings: {
 		name: "Brinewater Springs",
+		alias: ["Brinewater", "Springs", "Brine", "BS", "BWS"],
 		id: 13,
 		minimap: {
 			rotation: -30,
@@ -1420,6 +1435,7 @@ export const LOCATIONS = {
 	},
 	MantaMaria: {
 		name: "Manta Maria",
+		alias: ["Manta", "Maria", "Ship", "MT", "MTM"],
 		id: 14,
 		minimap: {
 			rotation: -45,
@@ -1524,6 +1540,7 @@ export const LOCATIONS = {
 	},
 	UmamiRuins: {
 		name: "Um'ami Ruins",
+		alias: ["Umami", "Um'ami", "Ruins", "Egypt", "UR", "UMR"],
 		id: 15,
 		minimap: {
 			rotation: -27,
@@ -1613,6 +1630,7 @@ export const LOCATIONS = {
 	},
 	HumpbackPumpTrack: {
 		name: "Humpback Pump Track",
+		alias: ["Humpback", "Pumptrack", "Skateboard", "HP", "HPT"],
 		id: 16,
 		minimap: {
 			rotation: -35,
@@ -1721,6 +1739,7 @@ export const LOCATIONS = {
 	},
 	BarnacleAndDime: {
 		name: "Barnacle & Dime",
+		alias: ["Barnacle", "Dime", "Shopping", "Barnacle and Dime", "Mall", "BD", "BAD"],
 		id: 17,
 		minimap: {
 			rotation: -25,
@@ -1821,6 +1840,7 @@ export const LOCATIONS = {
 	},
 	CrablegCapital: {
 		name: "Crableg Capital",
+		alias: ["Crableg", "Skyscraper", "Crab", "Capital", "CC", "CLC"],
 		id: 18,
 		minimap: {
 			rotation: -65,
@@ -1914,6 +1934,7 @@ export const LOCATIONS = {
 	},
 	ShipshapeCargoCo: {
 		name: "Shipshape Cargo Co.",
+		alias: ["Shipshape", "Cargo", "SC", "SCC"],
 		id: 19,
 		minimap: {
 			rotation: -40,
@@ -2013,6 +2034,7 @@ export const LOCATIONS = {
 	},
 	BluefinDepot: {
 		name: "Bluefin Depot",
+		alias: ["Bluefin", "Depot", "BF", "BFD"],
 		id: 20,
 		minimap: {
 			rotation: -42,
@@ -2113,6 +2135,7 @@ export const LOCATIONS = {
 	},
 	RoboRomEn: {
 		name: "Robo ROM-en",
+		alias: ["Ramen", "ROMen", "Robo", "ROM-en", "Robo Ramen", "RR", "ROB"],
 		id: 21,
 		minimap: {
 			rotation: -30,
@@ -2200,6 +2223,7 @@ export const LOCATIONS = {
 	},
 	MarlinAirport: {
 		name: "Marlin Airport",
+		alias: ["Marlin", "Airport", "Plane", "MA", "AIR"],
 		id: 22,
 		minimap: {
 			rotation: -12,
@@ -2307,6 +2331,7 @@ export const LOCATIONS = {
 	},
 	LemuriaHub: {
 		name: "Lemuria Hub",
+		alias: ["Lemuria", "Lumeria", "Train", "LH", "LEM"],
 		id: 23,
 		minimap: {
 			rotation: 0,
@@ -2330,4 +2355,119 @@ export function isMapName(t: unknown): t is MapName {
 	return typeof t === "string" && t in LOCATIONS;
 }
 
-type T = (typeof LOCATIONS)[keyof typeof LOCATIONS]["gamemodes"][Gamemode][number]["content"];
+// Make sure each alias is unique
+const aliases = new Set<string>([
+	// These are commonly used, make sure they arent reused accidentally.
+	// It would be confusing to see, e.g. 'SZ CB' to refer to Splat Zones Crableg after all!
+	"TW",
+	"SZ",
+	"TC",
+	"RM",
+	"CB",
+	"Turf",
+	"Zones",
+	"Tower",
+	"Rainmaker",
+	"Clams"
+]);
+// Generate a command palette for locations too
+export const locationCommandPalette: Array<{
+	key: `${"map" | "tw" | "sz" | "tc" | "rm" | "cb"}-${MapName}`;
+	name: string;
+	desc: string;
+	alias: Array<string>;
+}> = [];
+for (const [key, location] of Object.entries(LOCATIONS) as Array<
+	[MapName, (typeof LOCATIONS)[MapName]]
+>) {
+	for (const alias of location.alias) {
+		if (aliases.has(alias)) {
+			throw new Error(`Alias is reused: '${alias}' in ${location.name}`);
+		}
+		aliases.add(alias);
+	}
+
+	locationCommandPalette.push(
+		{
+			key: `map-${key}`,
+			name: `Switch to ${location.name}`,
+			desc: `Change the current map to ${location.name}`,
+			alias: location.alias
+		},
+		{
+			key: `tw-${key}`,
+			name: `Switch to Turf War on ${location.name}`,
+			desc: `Change the current map to ${location.name} on the Turf War gamemode.`,
+			alias: location.alias.flatMap((alias) => [
+				`TW ${alias}`,
+				`Turf ${alias}`,
+				`Turf War ${alias}`,
+				`TW${alias}`,
+				`${alias}TW`,
+				`${alias} TW`,
+				`${alias} Turf`,
+				`${alias} Turf War`
+			])
+		},
+		{
+			key: `sz-${key}`,
+			name: `Switch to Splat Zones on ${location.name}`,
+			desc: `Change the current map to ${location.name} on the Splat Zones gamemode.`,
+			alias: location.alias.flatMap((alias) => [
+				`SZ ${alias}`,
+				`Zones ${alias}`,
+				`Splat Zones ${alias}`,
+				`SZ${alias}`,
+				`${alias}SZ`,
+				`${alias} SZ`,
+				`${alias} Zones`,
+				`${alias} Splat Zones`
+			])
+		},
+		{
+			key: `tc-${key}`,
+			name: `Switch to Tower Control on ${location.name}`,
+			desc: `Change the current map to ${location.name} on the Tower Control gamemode.`,
+			alias: location.alias.flatMap((alias) => [
+				`TC ${alias}`,
+				`Tower ${alias}`,
+				`Tower Control ${alias}`,
+				`TC${alias}`,
+				`${alias}TC`,
+				`${alias} TC`,
+				`${alias} Tower`,
+				`${alias} Tower Control`
+			])
+		},
+		{
+			key: `rm-${key}`,
+			name: `Switch to Rainmaker on ${location.name}`,
+			desc: `Change the current map to ${location.name} on the Rainmaker gamemode.`,
+			alias: location.alias.flatMap((alias) => [
+				`RM ${alias}`,
+				`Rain ${alias}`,
+				`Rainmaker ${alias}`,
+				`RM${alias}`,
+				`${alias}RM`,
+				`${alias} RM`,
+				`${alias} Rain`,
+				`${alias} Rainmaker`
+			])
+		},
+		{
+			key: `cb-${key}`,
+			name: `Switch to Clam Blitz on ${location.name}`,
+			desc: `Change the current map to ${location.name} on the Clam Blitz gamemode.`,
+			alias: location.alias.flatMap((alias) => [
+				`CB ${alias}`,
+				`Clams ${alias}`,
+				`Clam Blitz ${alias}`,
+				`CB${alias}`,
+				`${alias}CB`,
+				`${alias} CB`,
+				`${alias} Clams`,
+				`${alias} Clam Blitz`
+			])
+		}
+	);
+}

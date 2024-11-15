@@ -34,10 +34,7 @@ export type RequiredItemOptions<T extends Item> = {
 	 */
 	readonly disabled: boolean;
 };
-export type ItemOptions<T extends Item> = OptionalKeys<
-	RequiredItemOptions<T>,
-	"text" | "disabled"
->;
+export type ItemOptions<T extends Item> = OptionalKeys<RequiredItemOptions<T>, "text" | "disabled">;
 
 export type ListItem<T extends Item> = {
 	id: string;
@@ -61,7 +58,7 @@ export type Searchable<T extends Item> = {
 
 export type Labelable = {
 	/** The string to set the `aria-label` attribute on a node to. */
-	label: string;
+	readonly label: string;
 };
 
 export type Expandable = {
