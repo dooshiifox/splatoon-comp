@@ -35,7 +35,7 @@
 			: ''}"
 	style:top="{thisEl.centerY}px"
 	style:left="{thisEl.centerX}px"
-	style:--editor-zoom={editor.zoom * editor.getScale(id)}
+	style:--editor-zoom={editor.zoom.animated * editor.getScale(id)}
 	style:z-index={thisEl.zIndex}
 	style:transform={editor.calculateElementTransform(id)}
 	style:width="{imgWidth}px"

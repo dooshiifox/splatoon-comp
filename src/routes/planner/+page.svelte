@@ -425,7 +425,7 @@
 			onwheel={(e) => e.stopPropagation()}
 		>
 			<p class="mx-4 my-1 font-mono text-lg text-gray-200">
-				{(editor.zoom * 100).toFixed(0)}% Zoom
+				{(editor.zoom.animated * 100).toFixed(0)}% Zoom
 			</p>
 
 			<ul class="mx-4 my-1 flex max-w-60 flex-col gap-y-1 text-base text-gray-200">

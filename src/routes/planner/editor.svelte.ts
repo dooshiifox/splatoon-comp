@@ -1,6 +1,8 @@
 import { dev } from "$app/environment";
 import { uuid } from "$lib/uuid";
 import { copyText, unreachable, type OptionalKeys } from "albtc";
+import { linear, quadOut } from "svelte/easing";
+import { tweened, type TweenedOptions } from "svelte/motion";
 import { SvelteMap, SvelteSet } from "svelte/reactivity";
 
 function clamp(num: number, min: number, max: number) {
@@ -42,6 +44,26 @@ function canAcceptKeyboardEvents(e: KeyboardEvent) {
 	);
 }
 
+function tweenedState<T>(value: T, defaults: TweenedOptions<T> = {}) {
+	let _target = $state(value);
+	let current = $state(value);
+	const store = tweened(value, defaults);
+	$effect(() => store.subscribe((c) => (current = c)));
+
+	return {
+		get animated() {
+			return current;
+		},
+		get target() {
+			return _target;
+		},
+		setValue(target: T, opts?: TweenedOptions<T>) {
+			_target = target;
+			store.set(target, opts);
+		}
+	};
+}
+
 type EditorEvent = {
 	"context-menu-open": [{ x: number; y: number }];
 	"context-menu-close": [];
@@ -60,9 +82,22 @@ export class Editor {
 	get clientHeight() {
 		return this.conf.clientHeight;
 	}
-	zoom = $state(1);
-	offsetX = $state(0);
-	offsetY = $state(0);
+	zoom = tweenedState(1, {
+		duration: 100,
+		easing: quadOut
+	});
+	offsetX = tweenedState(0, {
+		duration: 0,
+		easing: linear
+	});
+	offsetY = tweenedState(0, {
+		duration: 0,
+		easing: linear
+	});
+	setPosition(x: number, y: number, animated = false) {
+		this.offsetX.setValue(x, animated ? { duration: 100 } : {});
+		this.offsetY.setValue(y, animated ? { duration: 100 } : {});
+	}
 	mouseScreenX = $state(0);
 	mouseScreenY = $state(0);
 	get mouseX() {
@@ -70,6 +105,12 @@ export class Editor {
 	}
 	get mouseY() {
 		return this.toCanvasSpaceY(this.mouseScreenY);
+	}
+	get mouseXTarget() {
+		return this.toCanvasSpaceX(this.mouseScreenX, false);
+	}
+	get mouseYTarget() {
+		return this.toCanvasSpaceY(this.mouseScreenY, false);
 	}
 
 	isSpaceDown = $state(false);
@@ -110,20 +151,32 @@ export class Editor {
 	}
 
 	/** Converts from a position in the browser to a position in the editor. */
-	toCanvasSpaceX(pxFromScreenLeft: number) {
-		return this.offsetX + (pxFromScreenLeft - this.clientWidth / 2) / this.zoom;
+	toCanvasSpaceX(pxFromScreenLeft: number, useAnimated = true) {
+		if (useAnimated) {
+			return this.offsetX.animated + (pxFromScreenLeft - this.clientWidth / 2) / this.zoom.animated;
+		}
+		return this.offsetX.target + (pxFromScreenLeft - this.clientWidth / 2) / this.zoom.target;
 	}
 	/** Converts from a position in the browser to a position in the editor. */
-	toCanvasSpaceY(pxFromScreenTop: number) {
-		return this.offsetY + (pxFromScreenTop - this.clientHeight / 2) / this.zoom;
+	toCanvasSpaceY(pxFromScreenTop: number, useAnimated = true) {
+		if (useAnimated) {
+			return this.offsetY.animated + (pxFromScreenTop - this.clientHeight / 2) / this.zoom.animated;
+		}
+		return this.offsetY.target + (pxFromScreenTop - this.clientHeight / 2) / this.zoom.target;
 	}
 	/** Converts from a position in the editor to a position in the browser. */
-	toScreenSpaceX(canvasX: number) {
-		return (canvasX - this.offsetX) * this.zoom + this.clientWidth / 2;
+	toScreenSpaceX(canvasX: number, useAnimated = true) {
+		if (useAnimated) {
+			return (canvasX - this.offsetX.animated) * this.zoom.animated + this.clientWidth / 2;
+		}
+		return (canvasX - this.offsetX.target) * this.zoom.target + this.clientWidth / 2;
 	}
 	/** Converts from a position in the editor to a position in the browser. */
-	toScreenSpaceY(canvasY: number) {
-		return (canvasY - this.offsetY) * this.zoom + this.clientHeight / 2;
+	toScreenSpaceY(canvasY: number, useAnimated = true) {
+		if (useAnimated) {
+			return (canvasY - this.offsetY.animated) * this.zoom.animated + this.clientHeight / 2;
+		}
+		return (canvasY - this.offsetY.target) * this.zoom.target + this.clientHeight / 2;
 	}
 
 	/** Opens the context menu at the current mouse position. */
@@ -160,15 +213,15 @@ export class Editor {
 		if (!canAcceptKeyboardEvents(e)) return;
 
 		if (e.code === "Equal" && e.ctrlKey) {
-			this.zoomInTo(this.getNextZoomLevel(-1), this.offsetX, this.offsetY);
+			this.zoomInTo(this.getNextZoomLevel(-1), this.offsetX.target, this.offsetY.target);
 			e.preventDefault();
 			e.stopImmediatePropagation();
 		} else if (e.code === "Minus" && e.ctrlKey) {
-			this.zoomInTo(this.getNextZoomLevel(1), this.offsetX, this.offsetY);
+			this.zoomInTo(this.getNextZoomLevel(1), this.offsetX.target, this.offsetY.target);
 			e.preventDefault();
 			e.stopImmediatePropagation();
 		} else if (e.code === "Digit0" && e.ctrlKey) {
-			this.zoomInTo(1, this.offsetX, this.offsetY);
+			this.zoomInTo(1, this.offsetX.target, this.offsetY.target);
 			e.preventDefault();
 			e.stopImmediatePropagation();
 		} else if (e.code === "KeyC" && e.ctrlKey && e.shiftKey) {
@@ -264,22 +317,24 @@ export class Editor {
 		this.touchPoints.updatePoints(e.touches);
 		this.isPanning = this.touchPoints.length === 1;
 		if (this.touchPoints.length === 2) {
-			this.startPinchZoomLevel = this.zoom;
+			this.startPinchZoomLevel = this.zoom.animated;
 		}
 	}
 	/** Fired when the user moves their mouse. */
 	onMouseMove(e: MouseEvent) {
 		if (this.isPanning) {
-			this.offsetX -= e.movementX / this.zoom;
-			this.offsetY -= e.movementY / this.zoom;
+			this.setPosition(
+				this.offsetX.animated - e.movementX / this.zoom.animated,
+				this.offsetY.animated - e.movementY / this.zoom.animated
+			);
 		} else if (this.mayBeDraggingSelectedElements) {
 			this.selected.forEach((id) => {
 				const el = this.getElement(id);
 				if (!el) return;
 
 				this.updateElement(id, {
-					centerX: el.centerX + e.movementX / this.zoom,
-					centerY: el.centerY + e.movementY / this.zoom
+					centerX: el.centerX + e.movementX / this.zoom.animated,
+					centerY: el.centerY + e.movementY / this.zoom.animated
 				});
 			});
 		}
@@ -298,8 +353,10 @@ export class Editor {
 				force: 0,
 				rotationAngle: 0
 			};
-			this.offsetX -= delta.x / this.zoom;
-			this.offsetY -= delta.y / this.zoom;
+			this.setPosition(
+				this.offsetX.animated - delta.x / this.zoom.animated,
+				this.offsetY.animated - delta.y / this.zoom.animated
+			);
 		} else if (this.touchPoints.length === 2) {
 			// User is probably trying to zoom in
 			const [pointA, pointB] = this.touchPoints.getPoints();
@@ -318,7 +375,7 @@ export class Editor {
 			const zoomPercentage = (currentDistance - startDistance) / startDistance;
 			const newZoom = (1 + zoomPercentage) * this.startPinchZoomLevel;
 
-			this.zoomInTo(newZoom, midX, midY);
+			this.zoomInTo(newZoom, midX, midY, false);
 		}
 	}
 	/** Fired when a mouse button is released. */
@@ -349,56 +406,82 @@ export class Editor {
 			return;
 		}
 
-		const zoomX = e.shiftKey ? this.offsetX : this.mouseX;
-		const zoomY = e.shiftKey ? this.offsetY : this.mouseY;
+		const zoomX = e.shiftKey ? this.offsetX.target : this.mouseXTarget;
+		const zoomY = e.shiftKey ? this.offsetY.target : this.mouseYTarget;
 
 		// Ctrl key activates fine zoom
 		if (e.ctrlKey) {
 			this.zoomInTo(
-				Math.round(clamp(this.zoom - 0.01 * Math.sign(e.deltaY), 0.1, 10) * 100) / 100,
+				Math.round(clamp(this.zoom.target - 0.01 * Math.sign(e.deltaY), 0.1, 10) * 100) / 100,
 				zoomX,
-				zoomY
+				zoomY,
+				true,
+				false
 			);
 			e.preventDefault();
 			return;
 		}
 
-		this.zoomInTo(this.getNextZoomLevel(Math.sign(e.deltaY) as 0 | -1 | 1), zoomX, zoomY);
+		this.zoomInTo(
+			this.getNextZoomLevel(Math.sign(e.deltaY) as 0 | -1 | 1),
+			zoomX,
+			zoomY,
+			true,
+			false
+		);
 	}
-	getNextZoomLevel(dir: 1 | 0 | -1) {
+	getNextZoomLevel(dir: 1 | 0 | -1): number {
 		const PREDEFINED_ZOOMS = [
 			0.1, 0.2, 0.33, 0.5, 0.75, 0.9, 1, 1.1, 1.25, 1.4, 1.66, 2, 2.5, 3, 4, 5, 6, 7, 8, 9, 10
 		];
 		let nextZoomIndex: number;
+		const currentZoom = this.zoom.target;
 		if (dir === 1) {
-			nextZoomIndex = PREDEFINED_ZOOMS.findLastIndex((v) => v < this.zoom);
+			nextZoomIndex = PREDEFINED_ZOOMS.findLastIndex((v) => v < currentZoom);
 		} else if (dir === -1) {
-			nextZoomIndex = PREDEFINED_ZOOMS.findIndex((v) => v > this.zoom);
+			nextZoomIndex = PREDEFINED_ZOOMS.findIndex((v) => v > currentZoom);
 		} else {
-			return this.zoom;
+			return currentZoom;
 		}
 		// No next smallest zoom found, meaning its at its limit already
-		if (nextZoomIndex === -1) return this.zoom;
+		if (nextZoomIndex === -1) return currentZoom;
 
 		return PREDEFINED_ZOOMS[clamp(nextZoomIndex, 0, PREDEFINED_ZOOMS.length - 1)];
 	}
 	/** Zooms in to a new zoom level, with the zoom center at the given
 	 *  (x, y) coordinates.
 	 */
-	zoomInTo(newZoom: number, x: number, y: number) {
-		const currentZoom = this.zoom;
+	zoomInTo(newZoom: number, x: number, y: number, animated = true, animatedPos = true) {
+		const currentZoom = animatedPos ? this.zoom.animated : this.zoom.target;
 
 		const currentWidth = this.clientWidth / currentZoom;
 		const newWidth = this.clientWidth / newZoom;
-		const percentageAcross = (x - this.offsetX) / currentWidth;
-		this.offsetX = x - newWidth * percentageAcross;
+		const offsetX = animatedPos ? this.offsetX.animated : this.offsetX.target;
+		const percentageAcross = (x - offsetX) / currentWidth;
 
 		const currentHeight = this.clientHeight / currentZoom;
 		const newHeight = this.clientHeight / newZoom;
-		const percentageHeight = (y - this.offsetY) / currentHeight;
-		this.offsetY = y - newHeight * percentageHeight;
+		const offsetY = animatedPos ? this.offsetY.animated : this.offsetY.target;
+		const percentageHeight = (y - offsetY) / currentHeight;
 
-		this.zoom = newZoom;
+		const interpX = () => () => {
+			const newWidth = this.clientWidth / this.zoom.animated;
+			return x - newWidth * percentageAcross;
+		};
+		const interpY = () => () => {
+			const newHeight = this.clientHeight / this.zoom.animated;
+			return y - newHeight * percentageHeight;
+		};
+
+		this.zoom.setValue(newZoom, animated ? {} : { duration: 0 });
+		this.offsetX.setValue(
+			x - newWidth * percentageAcross,
+			animated ? { duration: 100, interpolate: interpX } : {}
+		);
+		this.offsetY.setValue(
+			y - newHeight * percentageHeight,
+			animated ? { duration: 100, interpolate: interpY } : {}
+		);
 	}
 
 	selected = new SvelteSet<string>();
@@ -508,7 +591,7 @@ export class Editor {
 	}
 	getScale(id: string) {
 		const el = this.getElement(id);
-		return applyScale(this.zoom, el?.scale ?? "base");
+		return applyScale(this.zoom.animated, el?.scale ?? "base");
 	}
 }
 

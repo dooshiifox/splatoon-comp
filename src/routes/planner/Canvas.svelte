@@ -72,7 +72,8 @@
 >
 	<div
 		class="with-cursor contain-[layout_style_size] absolute left-1/2 top-1/2 size-px"
-		style="transform: scale({editor.zoom}) translate({-editor.offsetX}px, {-editor.offsetY}px)"
+		style="transform: scale({editor.zoom.animated}) translate({-editor.offsetX.animated}px, {-editor
+			.offsetY.animated}px)"
 		style:--cursor={editor.cursor}
 	>
 		{#each Object.values(editor.elements) as element (element.id)}
