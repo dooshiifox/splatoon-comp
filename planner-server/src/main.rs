@@ -2,6 +2,7 @@
 #![feature(let_chains)]
 
 use std::{
+    borrow::Cow,
     collections::HashMap,
     convert::Infallible,
     net::{IpAddr, Ipv4Addr, SocketAddr},
@@ -19,16 +20,19 @@ use hyper::{
     Method, Request, Response, StatusCode, Version,
 };
 use hyper_util::rt::TokioIo;
-use serde::{ser::SerializeStruct, Serialize, Serializer};
+use serde::Serialize;
 use state::{user::AccessLevel, App, Color, RoomUser};
 use tokio::net::TcpListener;
-use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::tungstenite::{
+    protocol::{frame::coding::CloseCode, CloseFrame},
+    Message,
+};
 use uuid::Uuid;
 
 pub mod commands;
 pub mod state;
 
-const PROTOCOL_VERSION: &str = "1";
+const PROTOCOL_VERSION: usize = 1;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -149,11 +153,12 @@ fn is_valid_request(req: &Request<Incoming>) -> bool {
     true
 }
 
-enum JoinError<'a> {
+#[derive(Debug, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum JoinError {
     WebsocketError,
     ProtocolError {
-        server: &'static str,
-        client: &'a str,
+        server: usize,
     },
     RoomMissing,
     RoomInvalidLength {
@@ -167,111 +172,57 @@ enum JoinError<'a> {
         max_len: u16,
         specified_len: usize,
     },
-    ColorInvalid {
-        specified: &'a str,
-    },
+    ColorInvalid,
     PasswordRequired,
     PasswordIncorrect,
 }
-impl JoinError<'_> {
-    fn respond(&self) -> Response<Body> {
+impl JoinError {
+    fn respond_websocket_error() -> Response<Body> {
         Response::builder()
             .status(StatusCode::BAD_REQUEST)
             .header(CONTENT_TYPE, "application/json")
-            .body(Body::from(serde_json::to_string(&self).unwrap()))
+            .body(Body::from(
+                serde_json::to_string(&JoinError::WebsocketError).unwrap(),
+            ))
             .unwrap()
     }
-}
-impl Serialize for JoinError<'_> {
-    fn serialize<S>(&self, s: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        match *self {
-            JoinError::WebsocketError => {
-                let mut ser = s.serialize_struct("JoinError", 2)?;
-                ser.serialize_field("error", "WebsocketError")?;
-                ser.serialize_field(
-                    "message",
-                    "Please send a valid request to be upgraded to a websocket connection.",
-                )?;
-                ser.end()
-            }
-            JoinError::ProtocolError { server, client } => {
-                let mut ser = s.serialize_struct("JoinError", 4)?;
-                ser.serialize_field("error", "ProtocolError")?;
-                ser.serialize_field(
-                    "message",
-                    "Specified protocol is not the same between the client and server.",
-                )?;
-                ser.serialize_field("server", server)?;
-                ser.serialize_field("client", client)?;
-                ser.end()
-            }
-            JoinError::RoomMissing => {
-                let mut ser = s.serialize_struct("JoinError", 2)?;
-                ser.serialize_field("error", "RoomMissing")?;
-                ser.serialize_field("message", "Please specify a `room` in the query params.")?;
-                ser.end()
-            }
-            JoinError::RoomInvalidLength {
-                min_len,
-                max_len,
-                specified_len,
-            } => {
-                let mut ser = s.serialize_struct("JoinError", 5)?;
-                ser.serialize_field("error", "RoomInvalidLength")?;
-                ser.serialize_field("message", "Provided length of `room` is not valid.")?;
-                ser.serialize_field("min_len", &min_len)?;
-                ser.serialize_field("max_len", &max_len)?;
-                ser.serialize_field("specified_len", &specified_len)?;
-                ser.end()
-            }
-            JoinError::UsernameMissing => {
-                let mut ser = s.serialize_struct("JoinError", 2)?;
-                ser.serialize_field("error", "UsernameMissing")?;
-                ser.serialize_field(
-                    "message",
-                    "Please specify a `username` in the query params.",
-                )?;
-                ser.end()
-            }
-            JoinError::UsernameInvalidLength {
-                min_len,
-                max_len,
-                specified_len,
-            } => {
-                let mut ser = s.serialize_struct("JoinError", 5)?;
-                ser.serialize_field("error", "UsernameInvalidLength")?;
-                ser.serialize_field("message", "Provided length of `username` is not valid.")?;
-                ser.serialize_field("min_len", &min_len)?;
-                ser.serialize_field("max_len", &max_len)?;
-                ser.serialize_field("specified_len", &specified_len)?;
-                ser.end()
-            }
-            JoinError::ColorInvalid { specified } => {
-                let mut ser = s.serialize_struct("JoinError", 3)?;
-                ser.serialize_field("error", "ColorInvalid")?;
-                ser.serialize_field("message", "Provided color is not valid.")?;
-                ser.serialize_field("specified", specified)?;
-                ser.end()
-            }
-            JoinError::PasswordRequired => {
-                let mut ser = s.serialize_struct("JoinError", 2)?;
-                ser.serialize_field("error", "PasswordRequired")?;
-                ser.serialize_field("message", "A password is required to join this room, but one was not provided in the `X-Editor-Password` header.")?;
-                ser.end()
-            }
-            JoinError::PasswordIncorrect => {
-                let mut ser = s.serialize_struct("JoinError", 2)?;
-                ser.serialize_field("error", "PasswordIncorrect")?;
-                ser.serialize_field(
-                    "message",
-                    "The password specified when trying to join this room was not correct.",
-                )?;
-                ser.end()
-            }
-        }
+
+    async fn respond_on_websocket(
+        &self,
+        mut ws_stream: tokio_tungstenite::WebSocketStream<TokioIo<hyper::upgrade::Upgraded>>,
+    ) {
+        // Warning: the JSON-stringified string must be <= 123 bytes long,
+        // for websocket reasons.
+        // Whether this is a bug in the tungstenite implementation or just
+        // from the websocket spec is unknown to me.
+        let _ = ws_stream
+            .close(Some(CloseFrame {
+                reason: Cow::Borrowed(
+                    &serde_json::to_string(&self).expect("failed to serialize message"),
+                ),
+                code: match self {
+                    Self::WebsocketError => CloseCode::Error,
+                    Self::ProtocolError { .. } => CloseCode::Library(4999),
+                    // xxx0 - Missing or Required
+                    // xxx1 - Invalid Format
+                    // xxx2 - Invalid Length
+                    // xxx3 - Incorrect
+
+                    // xx0x - Room
+                    // xx1x - Username
+                    // xx2x - Color
+                    // xx3x - Password
+                    Self::RoomMissing => CloseCode::Library(4000),
+                    Self::RoomInvalidLength { .. } => CloseCode::Library(4002),
+                    Self::UsernameMissing => CloseCode::Library(4010),
+                    Self::UsernameInvalidLength { .. } => CloseCode::Library(4012),
+                    Self::ColorInvalid { .. } => CloseCode::Library(4021),
+                    Self::PasswordRequired => CloseCode::Library(4030),
+                    Self::PasswordIncorrect => CloseCode::Library(4033),
+                },
+            }))
+            .await
+            .inspect_err(|e| eprintln!("Failed to send close to user: {e:#?}"));
     }
 }
 
@@ -284,11 +235,11 @@ type Body = http_body_util::Full<Bytes>;
 /// ingoing and outgoing websocket messages.
 async fn handle_request(
     app: AppState,
-    mut req: Request<Incoming>,
+    req: Request<Incoming>,
     addr: SocketAddr,
 ) -> Result<Response<Body>, Infallible> {
     if !is_valid_request(&req) {
-        return Ok(JoinError::WebsocketError.respond());
+        return Ok(JoinError::respond_websocket_error());
     }
 
     let headers = req.headers();
@@ -296,22 +247,6 @@ async fn handle_request(
         .get(header::SEC_WEBSOCKET_KEY)
         .map(|k| tokio_tungstenite::tungstenite::handshake::derive_accept_key(k.as_bytes()));
 
-    // Check the protocol matches
-    let specified_protocol = headers.get("x-editor-protocol");
-    if !specified_protocol
-        .map(|h| h == PROTOCOL_VERSION)
-        .unwrap_or(false)
-    {
-        return Ok(JoinError::ProtocolError {
-            server: PROTOCOL_VERSION,
-            client: specified_protocol
-                .and_then(|h| h.to_str().ok())
-                .unwrap_or_default(),
-        }
-        .respond());
-    }
-
-    // Check the user has specified some required params to join a room
     let mut params: HashMap<String, String> = req
         .uri()
         .query()
@@ -322,93 +257,112 @@ async fn handle_request(
         })
         .unwrap_or_default();
 
-    // Remove the entry so we own the value instead of have a ref to it
-    let room_name = params.remove("room");
-    if room_name.as_ref().map(String::is_empty).unwrap_or(true) {
-        return Ok(JoinError::RoomMissing.respond());
-    }
-    let room_name = room_name.unwrap();
-    if room_name.len() < 3 || room_name.len() > 32 {
-        return Ok(JoinError::RoomInvalidLength {
-            min_len: 3,
-            max_len: 32,
-            specified_len: room_name.len(),
-        }
-        .respond());
-    }
-
-    let username = params.remove("username");
-    if username.as_ref().map(String::is_empty).unwrap_or(true) {
-        return Ok(JoinError::UsernameMissing.respond());
-    }
-    let username = username.unwrap();
-    if username.len() < 3 || username.len() > 32 {
-        return Ok(JoinError::UsernameInvalidLength {
-            min_len: 3,
-            max_len: 32,
-            specified_len: username.len(),
-        }
-        .respond());
-    }
-
-    let color = match params.remove("color") {
-        Some(color) => {
-            if let Ok(color) = color.parse() {
-                color
-            } else {
-                return Ok(JoinError::ColorInvalid { specified: &color }.respond());
-            }
-        }
-        None => Color::get_random_color(),
-    };
-
-    let password = headers.get("x-editor-password").and_then(|f| {
-        if f.is_empty() {
-            None
-        } else {
-            Some(f.to_str().map(|f| f.to_string()).unwrap_or_default())
-        }
-    });
-    if let Some(room) = app.read().unwrap().get_room(&room_name) {
-        // If the room doesn't require a password but one was given,
-        // just accept it.
-        if room.requires_password() {
-            if password.is_none() {
-                return Ok(JoinError::PasswordRequired.respond());
-            }
-            if !room.is_password_correct(password.as_deref()) {
-                return Ok(JoinError::PasswordIncorrect.respond());
-            }
-        }
-    }
-
-    let user = commands::join::Receive {
-        room_name: room_name.clone(),
-        password,
-        username,
-        color,
-        canvas: None,
-    };
-
     let ver = req.version();
     tokio::task::spawn(async move {
-        match hyper::upgrade::on(&mut req).await {
+        match hyper::upgrade::on(req).await {
             Ok(upgraded) => {
                 let upgraded = TokioIo::new(upgraded);
-                handle_connection(
-                    app,
-                    user,
-                    tokio_tungstenite::WebSocketStream::from_raw_socket(
-                        upgraded,
-                        tokio_tungstenite::tungstenite::protocol::Role::Server,
-                        None,
-                    )
-                    .await,
-                    addr,
-                )
-                .await;
+                let socket = tokio_tungstenite::WebSocketStream::from_raw_socket(
+                    upgraded,
+                    tokio_tungstenite::tungstenite::protocol::Role::Server,
+                    None,
+                );
+
+                // Check the protocol matches
+                let specified_protocol = params.remove("protocol");
+                if !specified_protocol
+                    .as_ref()
+                    .and_then(|h| h.parse::<usize>().ok())
+                    .map(|h| h == PROTOCOL_VERSION)
+                    .unwrap_or(false)
+                {
+                    return JoinError::ProtocolError {
+                        server: PROTOCOL_VERSION,
+                    }
+                    .respond_on_websocket(socket.await)
+                    .await;
+                }
+
+                // Check the user has specified some required params to join a room
+                // Remove the entry so we own the value instead of have a ref to it
+                let room_name = params.remove("room");
+                if room_name.as_ref().map(String::is_empty).unwrap_or(true) {
+                    return JoinError::RoomMissing
+                        .respond_on_websocket(socket.await)
+                        .await;
+                }
+                let room_name = room_name.unwrap();
+                if room_name.len() < 3 || room_name.len() > 32 {
+                    return JoinError::RoomInvalidLength {
+                        min_len: 3,
+                        max_len: 32,
+                        specified_len: room_name.len(),
+                    }
+                    .respond_on_websocket(socket.await)
+                    .await;
+                }
+
+                let username = params.remove("username");
+                if username.as_ref().map(String::is_empty).unwrap_or(true) {
+                    return JoinError::UsernameMissing
+                        .respond_on_websocket(socket.await)
+                        .await;
+                }
+                let username = username.unwrap();
+                if username.len() < 3 || username.len() > 32 {
+                    return JoinError::UsernameInvalidLength {
+                        min_len: 3,
+                        max_len: 32,
+                        specified_len: username.len(),
+                    }
+                    .respond_on_websocket(socket.await)
+                    .await;
+                }
+
+                let color = match params.remove("color") {
+                    Some(color) => {
+                        if let Ok(color) = color.parse() {
+                            color
+                        } else {
+                            return JoinError::ColorInvalid
+                                .respond_on_websocket(socket.await)
+                                .await;
+                        }
+                    }
+                    None => Color::get_random_color(),
+                };
+
+                // Because the `app.read().unwrap()` holds a read guard, we can't
+                // just run `JoinError::<x>.respond_on_websocket().await`,
+                // as the read guard can't be held across the `.await`
+                let password = params.remove("password").filter(String::is_empty);
+                let mut err = None;
+                if let Some(room) = app.read().unwrap().get_room(&room_name) {
+                    // If the room doesn't require a password but one was given,
+                    // just accept it.
+                    if room.requires_password() {
+                        if password.is_none() {
+                            err = Some(JoinError::PasswordRequired);
+                        } else if !room.is_password_correct(password.as_deref()) {
+                            err = Some(JoinError::PasswordIncorrect);
+                        }
+                    }
+                }
+                if let Some(err) = err {
+                    return err.respond_on_websocket(socket.await).await;
+                }
+
+                let user = commands::join::Receive {
+                    room_name: room_name.clone(),
+                    password,
+                    username,
+                    color,
+                    canvas: None,
+                };
+
+                handle_connection(app, user, socket.await, addr).await;
             }
-            Err(e) => println!("upgrade error: {}", e),
+            Err(e) => eprintln!("upgrade error: {}", e),
         }
     });
 
@@ -431,7 +385,7 @@ async fn main() {
     let listener = TcpListener::bind(addr).await.unwrap_or_else(|e| {
         panic!("Could not bind to {addr} - try specify a different port or IP address.\n{e}")
     });
-    println!("Hosting server on {addr}");
+    println!("Hosting server on ws://{addr}");
 
     let app: AppState = Arc::new(RwLock::new(App::new()));
 
