@@ -2,6 +2,7 @@ use futures_channel::mpsc::UnboundedSender;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, net::SocketAddr};
 use tokio_tungstenite::tungstenite::Message;
+use tracing::{trace, warn};
 use user::AccessLevel;
 use uuid::Uuid;
 
@@ -49,13 +50,6 @@ impl App {
             false
         }
     }
-}
-
-fn current_time() -> u128 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .expect("Time went backwards")
-        .as_millis()
 }
 
 #[derive(Debug)]
@@ -111,6 +105,15 @@ impl Room {
     }
     /// Adds a user to the room.
     pub fn add_user(&mut self, user: RoomUser) {
+        trace!(
+            "User `{}` [{}] [{}] [{}] joined `{}` with {} perms",
+            user.username,
+            user.uuid,
+            user.addr,
+            user.color,
+            self.name,
+            user.access_level
+        );
         self.announce_all(commands::join::Announce {
             user: user.clone().into(),
         });
@@ -133,9 +136,9 @@ impl Room {
         self.users.retain(|u| {
             if &u.addr == addr {
                 removed_user = Some(u.clone());
-                true
-            } else {
                 false
+            } else {
+                true
             }
         });
 
@@ -257,8 +260,8 @@ impl RoomUser {
     /// Sends a personalized message to this user.
     ///
     /// If you want to send the same message to multiple users, prefer
-    /// [`Room::announce`], [`Room::announce_respond`], or [`Room::announce_all`], as this will prevent
-    /// re-serializing the message.
+    /// [`Room::announce`], [`Room::announce_respond`], or [`Room::announce_all`],
+    /// as this will prevent re-serializing the message.
     pub fn send<T: Serialize>(&self, msg: &T) {
         self.send_str(&serde_json::to_string(msg).expect("failed to serialize message"))
     }
@@ -267,7 +270,7 @@ impl RoomUser {
         let _ = self
             .tx
             .unbounded_send(Message::text(msg))
-            .inspect_err(|e| eprintln!("Failed to send to user: {e:#?}"));
+            .inspect_err(|e| warn!("Failed to send to user: {e:#?}"));
     }
 }
 

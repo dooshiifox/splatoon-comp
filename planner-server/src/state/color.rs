@@ -1,6 +1,6 @@
 use rand::seq::IteratorRandom;
 use serde::{Deserialize, Serialize};
-use std::str::FromStr;
+use std::{fmt::Display, str::FromStr};
 
 const COLORS: [&str; 9] = [
     "#ef4444", "#f97316", "#eab308", "#84cc16", "#10b981", "#06b6d4", "#6366f1", "#a855f7",
@@ -81,5 +81,10 @@ impl FromStr for Color {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Self::new(s)
+    }
+}
+impl Display for Color {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }

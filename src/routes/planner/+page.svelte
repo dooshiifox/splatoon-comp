@@ -1,37 +1,4 @@
-<script lang="ts">
-	import { createListbox } from "$lib/headlessui";
-	import Transition from "$lib/headlessui/Transition.svelte";
-	import Check from "$lib/icons/Check.svelte";
-	import Editor from "./Editor.svelte";
-	import {
-		isGamemode,
-		type Gamemode,
-		type MapName,
-		isMapName,
-		getStageImage,
-		LOCATIONS,
-		type MapLocations,
-		GAMEMODES,
-		type Transform,
-		type Location,
-		locationCommandPalette
-	} from "./locations";
-	import TW from "$lib/s3/TW.svelte";
-	import SZ from "$lib/s3/SZ.svelte";
-	import TC from "$lib/s3/TC.svelte";
-	import RM from "$lib/s3/RM.svelte";
-	import CB from "$lib/s3/CB.svelte";
-	import type { Editor as TEditor } from "./editor.svelte";
-	import { untrack } from "svelte";
-	import { SvelteSet } from "svelte/reactivity";
-	import { applyBehaviors } from "$lib/headlessui/internal/behavior.svelte";
-	import { listenerBehavior } from "$lib/headlessui/internal/events";
-	import CommandPalette from "./CommandPalette.svelte";
-	import { strAfter, strStartsWith } from "$lib";
-	import { unreachable } from "albtc";
-	import { queryParameters } from "sveltekit-search-params";
-	import A from "$lib/mdsvex/a.svelte";
-
+<script module lang="ts">
 	function getCurrentSelected() {
 		const params = queryParameters({
 			map: {
@@ -94,23 +61,95 @@
 		};
 	}
 
+	const plannerContext = createContext<{
+		readonly editor: TEditor | undefined;
+		readonly map: ReturnType<typeof getCurrentSelected>;
+	}>("planner");
+	export const getPlannerContext = plannerContext.get;
+
+	const commandPaletteActions = [
+		{
+			key: "tw",
+			name: "Switch to Turf War",
+			desc: "Change the current map to the Turf War gamemode.",
+			alias: ["TW", "Turf", "Turf War"]
+		},
+		{
+			key: "sz",
+			name: "Switch to Splat Zones",
+			desc: "Change the current map to the Splat Zones gamemode.",
+			alias: ["SZ", "Zones", "Splat Zones"]
+		},
+		{
+			key: "tc",
+			name: "Switch to Tower Control",
+			desc: "Change the current map to the Tower Control gamemode.",
+			alias: ["TC", "Tower", "Tower Control"]
+		},
+		{
+			key: "rm",
+			name: "Switch to Rainmaker",
+			desc: "Change the current map to the Rainmaker gamemode.",
+			alias: ["RM", "Rain", "Rainmaker"]
+		},
+		{
+			key: "cb",
+			name: "Switch to Clam Blitz",
+			desc: "Change the current map to the Clam Blitz gamemode.",
+			alias: ["CB", "Clams", "Clam Blitz"]
+		},
+		...locationCommandPalette,
+		{
+			key: "mini",
+			name: "Switch to Minimap View",
+			desc: "Change to the minimap view of the current map. Alternatively, use the Ctrl+M keyboard shortcut.",
+			alias: ["mini", "minimap"]
+		},
+		{
+			key: "over",
+			name: "Switch to Overhead View",
+			desc: "Change to the overhead view of the current map. Alternatively, use the Ctrl+M keyboard shortcut.",
+			alias: ["over", "overhead"]
+		}
+	] as const;
+</script>
+
+<script lang="ts">
+	import Editor from "./Editor.svelte";
+	import {
+		isGamemode,
+		type Gamemode,
+		type MapName,
+		isMapName,
+		getStageImage,
+		LOCATIONS,
+		type Transform,
+		type Location,
+		locationCommandPalette
+	} from "./locations";
+	import type { Editor as TEditor } from "./editor.svelte";
+	import { untrack } from "svelte";
+	import { SvelteSet } from "svelte/reactivity";
+	import { applyBehaviors } from "$lib/headlessui/internal/behavior.svelte";
+	import { listenerBehavior } from "$lib/headlessui/internal/events";
+	import CommandPalette from "./CommandPalette.svelte";
+	import { strAfter, strStartsWith } from "$lib";
+	import { unreachable } from "albtc";
+	import { queryParameters } from "sveltekit-search-params";
+	import A from "$lib/mdsvex/a.svelte";
+	import PageTabs from "./PageTabs.svelte";
+	import { createContext } from "$lib/context";
+
 	let editor = $state<TEditor>();
 	let backgroundId: string;
 	const current = getCurrentSelected();
 	let image = $derived(getStageImage(current.mapInfo.id, current.mode, current.isMinimap));
-
-	const mapDropdown = createListbox<MapLocations & { key: MapName }>({
-		label: "Map",
-		get selected() {
-			return [{ ...current.mapInfo, key: current.map }];
+	plannerContext.set({
+		get editor() {
+			return editor;
 		},
-		set selected(val) {
-			if (val[0] === undefined) return;
-			current.map = val[0].key;
-		},
-		items: Object.entries(LOCATIONS).map(([k, v]) => ({ value: { key: k as MapName, ...v } })),
-		onselect(value) {
-			current.map = value[0].key;
+		get map() {
+			return current;
 		}
 	});
 
@@ -212,51 +251,6 @@
 		}
 	}
 
-	const commandPaletteActions = [
-		{
-			key: "tw",
-			name: "Switch to Turf War",
-			desc: "Change the current map to the Turf War gamemode.",
-			alias: ["TW", "Turf", "Turf War"]
-		},
-		{
-			key: "sz",
-			name: "Switch to Splat Zones",
-			desc: "Change the current map to the Splat Zones gamemode.",
-			alias: ["SZ", "Zones", "Splat Zones"]
-		},
-		{
-			key: "tc",
-			name: "Switch to Tower Control",
-			desc: "Change the current map to the Tower Control gamemode.",
-			alias: ["TC", "Tower", "Tower Control"]
-		},
-		{
-			key: "rm",
-			name: "Switch to Rainmaker",
-			desc: "Change the current map to the Rainmaker gamemode.",
-			alias: ["RM", "Rain", "Rainmaker"]
-		},
-		{
-			key: "cb",
-			name: "Switch to Clam Blitz",
-			desc: "Change the current map to the Clam Blitz gamemode.",
-			alias: ["CB", "Clams", "Clam Blitz"]
-		},
-		...locationCommandPalette,
-		{
-			key: "mini",
-			name: "Switch to Minimap View",
-			desc: "Change to the minimap view of the current map. Alternatively, use the Ctrl+M keyboard shortcut.",
-			alias: ["mini", "minimap"]
-		},
-		{
-			key: "over",
-			name: "Switch to Overhead View",
-			desc: "Change to the overhead view of the current map. Alternatively, use the Ctrl+M keyboard shortcut.",
-			alias: ["over", "overhead"]
-		}
-	] as const;
 	function onCommandPaletteAction(action: (typeof commandPaletteActions)[number]["key"]) {
 		console.debug("Command Palette action selected:", action);
 		if (action === "tw") {
@@ -322,97 +316,7 @@
 		}}
 	/>
 
-	<div
-		class="absolute left-0 right-0 top-0 z-10 border-b border-gray-800 bg-gray-900 md:left-4 md:top-4 md:w-80 md:rounded-xl md:border"
-	>
-		<div class="relative z-10 m-2">
-			<button
-				class="flex w-full flex-col rounded-lg bg-gray-800 px-6 py-1 text-left hover:bg-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
-				use:mapDropdown.button
-			>
-				<p class="text-base font-bold text-white md:text-lg">
-					{mapDropdown.selected[0].name}
-				</p>
-			</button>
-
-			<Transition
-				show={mapDropdown.expanded}
-				leave="transition ease-in duration-100"
-				leaveFrom="opacity-100"
-				leaveTo="opacity-0"
-			>
-				<ul
-					use:mapDropdown.list
-					class="absolute max-h-[min(40rem,80dvh)] w-full translate-y-1 overflow-auto rounded-lg bg-gray-700 py-1 text-base font-bold text-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none md:text-lg"
-				>
-					{#each mapDropdown.items as { value: { key: id, name } } (id)}
-						{@const isActive = mapDropdown.isActive(id as MapName)}
-						{@const isSelected = mapDropdown.isSelected(id as MapName)}
-						<li
-							class="flex cursor-default select-none flex-row items-center py-2 pl-2 pr-6 {isActive
-								? 'bg-slate-800 text-white'
-								: 'text-gray-200'}"
-							use:mapDropdown.list_item={id as MapName}
-						>
-							<div class="mr-2 h-5 w-5">
-								{#if isSelected}
-									<Check />
-								{/if}
-							</div>
-							<span class="block truncate {isSelected || isActive ? 'font-bold' : 'font-normal'}">
-								{name}
-							</span>
-						</li>
-					{/each}
-				</ul>
-			</Transition>
-		</div>
-
-		<div class="m-2 mt-0 flex flex-row justify-between md:flex-col">
-			<fieldset class="flex flex-row md:gap-2">
-				{#each GAMEMODES as gamemode}
-					<div class="relative aspect-square flex-1">
-						<input
-							id={gamemode}
-							class="peer absolute h-0 w-0 opacity-0"
-							type="radio"
-							bind:group={current.mode}
-							name="mode"
-							value={gamemode}
-						/>
-						<label
-							for={gamemode}
-							class="relative flex h-full cursor-pointer items-center rounded-lg p-2 outline-none peer-checked:bg-slate-800 peer-hover:bg-slate-700 peer-focus-visible:ring-2 peer-focus-visible:ring-blue-400"
-						>
-							{#if gamemode === "TW"}
-								<TW class="w-full" />
-							{:else if gamemode === "SZ"}
-								<SZ class="w-full" />
-							{:else if gamemode === "TC"}
-								<TC class="w-full" />
-							{:else if gamemode === "RM"}
-								<RM class="w-full" />
-							{:else if gamemode === "CB"}
-								<CB class="w-full" />
-							{/if}
-						</label>
-					</div>
-				{/each}
-			</fieldset>
-
-			<div class="mx-4 my-2 flex items-center md:w-full">
-				<input
-					id="minimap"
-					type="checkbox"
-					class="size-5 rounded bg-slate-200 text-blue-500"
-					bind:checked={current.isMinimap}
-				/>
-				<label for="minimap" class="hidden flex-1 pl-4 text-lg font-bold text-gray-200 md:inline"
-					>Minimap</label
-				>
-			</div>
-		</div>
-	</div>
+	<PageTabs />
 
 	<CommandPalette
 		bind:open={commandPaletteOpen}
@@ -452,41 +356,4 @@
 			</ul>
 		</div>
 	{/if}
-
-	<div
-		class="absolute bottom-2 right-2 z-10 rounded-xl border border-gray-800 bg-gray-900 px-6 py-2 shadow-md md:bottom-4 md:right-4"
-	>
-		<p class="mx-auto mb-2 w-fit text-base text-gray-200">
-			In Alpha. <A href="/planner/todo">View To-Do list</A>
-		</p>
-		<div class="flex flex-row items-center *:shrink-0">
-			<a href="https://github.com/dooshiifox/splatoon-comp" target="_blank" class="size-8 p-0.5">
-				<svg viewBox="0 0 24 24" class="fill-white">
-					<title>Github Logo</title>
-					<path
-						d="M12.5.75C6.146.75 1 5.896 1 12.25c0 5.089 3.292 9.387 7.863 10.91.575.101.79-.244.79-.546 0-.273-.014-1.178-.014-2.142-2.889.532-3.636-.704-3.866-1.35-.13-.331-.69-1.352-1.18-1.625-.402-.216-.977-.748-.014-.762.906-.014 1.553.834 1.769 1.179 1.035 1.74 2.688 1.25 3.349.948.1-.747.402-1.25.733-1.538-2.559-.287-5.232-1.279-5.232-5.678 0-1.25.445-2.285 1.178-3.09-.115-.288-.517-1.467.115-3.048 0 0 .963-.302 3.163 1.179.92-.259 1.897-.388 2.875-.388.977 0 1.955.13 2.875.388 2.2-1.495 3.162-1.179 3.162-1.179.633 1.581.23 2.76.115 3.048.733.805 1.179 1.825 1.179 3.09 0 4.413-2.688 5.39-5.247 5.678.417.36.776 1.05.776 2.128 0 1.538-.014 2.774-.014 3.162 0 .302.216.662.79.547C20.709 21.637 24 17.324 24 12.25 24 5.896 18.854.75 12.5.75Z"
-					></path>
-				</svg>
-			</a>
-
-			<div class="mx-3 h-5 w-0.5 bg-gray-600"></div>
-
-			<a href="https://bsky.app/profile/dooshii.dev" target="_blank" class="size-8 p-1"
-				><img
-					src="https://raw.githubusercontent.com/bluesky-social/social-app/refs/heads/main/assets/favicon.png"
-					class="size-full"
-					alt="Bluesky Logo"
-				/></a
-			>
-
-			<div class="mx-3 h-5 w-0.5 bg-gray-600"></div>
-
-			<img
-				src="https://cdn.prod.website-files.com/6257adef93867e50d84d30e2/636e0a6ca814282eca7172c6_icon_clyde_white_RGB.svg"
-				class="size-6"
-				alt="Discord Logo"
-			/>
-			<p class="ml-2 text-sm text-gray-200">@dooshii</p>
-		</div>
-	</div>
 </div>

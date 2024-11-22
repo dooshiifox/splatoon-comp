@@ -1,14 +1,9 @@
 <script module lang="ts">
-	import { getContext } from "svelte";
-
-	const EDITOR_CONTEXT = "EDITOR";
-	export function getEditorContext() {
-		return getContext<Editor>(EDITOR_CONTEXT);
-	}
+	const editorContext = createContext<Editor>("EDITOR");
+	export const getEditorContext = editorContext.get;
 </script>
 
 <script lang="ts">
-	import { setContext } from "svelte";
 	import EditorContextMenu from "./EditorContextMenu.svelte";
 	import CanvasText from "./CanvasText.svelte";
 	import CanvasImage from "./CanvasImage.svelte";
@@ -16,6 +11,7 @@
 	import { listenerBehavior } from "$lib/headlessui/internal/events";
 	import { Editor, RENDER_TOUCH_POINTS } from "./editor.svelte";
 	import { dev } from "$app/environment";
+	import { createContext } from "$lib/context";
 
 	type Props = {
 		onCreate?: (editor: Editor) => void;
@@ -63,7 +59,7 @@
 		]);
 	});
 
-	setContext(EDITOR_CONTEXT, editor);
+	editorContext.set(editor);
 </script>
 
 <div

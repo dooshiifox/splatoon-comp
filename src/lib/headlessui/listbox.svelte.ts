@@ -356,7 +356,7 @@ class Listbox<T extends Item> {
 	isActive(item: T | ItemKey<T>) {
 		const active = this.getActiveItem();
 		if (active === undefined) return false;
-		return getKey(active.value) === getKey(item);
+		return itemsEqual(active.value, item);
 	}
 	/** Returns if the given item is disabled. */
 	isDisabled(item: T | ItemKey<T>) {

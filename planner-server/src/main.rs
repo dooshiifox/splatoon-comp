@@ -27,12 +27,18 @@ use tokio_tungstenite::tungstenite::{
     protocol::{frame::coding::CloseCode, CloseFrame},
     Message,
 };
+use tracing::{error, info, level_filters::LevelFilter, trace, warn};
 use uuid::Uuid;
 
 pub mod commands;
 pub mod state;
 
 const PROTOCOL_VERSION: usize = 1;
+
+const MIN_ROOM_NAME_LEN: usize = 3;
+const MAX_ROOM_NAME_LEN: usize = 32;
+const MIN_USERNAME_LEN: usize = 1;
+const MAX_USERNAME_LEN: usize = 32;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -80,7 +86,7 @@ async fn handle_connection(
     };
 
     let broadcast_incoming = incoming.try_for_each(|msg| {
-        println!(
+        trace!(
             "Received a message from {}: {}",
             addr,
             msg.to_text().unwrap()
@@ -92,7 +98,7 @@ async fn handle_connection(
     pin_mut!(broadcast_incoming, receive_from_others);
     future::select(broadcast_incoming, receive_from_others).await;
 
-    println!("{} disconnected", &addr);
+    trace!("{} disconnected", &addr);
     app.write().unwrap().disconnect_user(&room_name, &addr);
 }
 
@@ -222,7 +228,7 @@ impl JoinError {
                 },
             }))
             .await
-            .inspect_err(|e| eprintln!("Failed to send close to user: {e:#?}"));
+            .inspect_err(|e| error!("Failed to send close to user: {e:#?}"));
     }
 }
 
@@ -291,11 +297,12 @@ async fn handle_request(
                         .respond_on_websocket(socket.await)
                         .await;
                 }
+
                 let room_name = room_name.unwrap();
-                if room_name.len() < 3 || room_name.len() > 32 {
+                if room_name.len() < MIN_ROOM_NAME_LEN || room_name.len() > MAX_ROOM_NAME_LEN {
                     return JoinError::RoomInvalidLength {
-                        min_len: 3,
-                        max_len: 32,
+                        min_len: MIN_ROOM_NAME_LEN as u16,
+                        max_len: MAX_ROOM_NAME_LEN as u16,
                         specified_len: room_name.len(),
                     }
                     .respond_on_websocket(socket.await)
@@ -309,10 +316,10 @@ async fn handle_request(
                         .await;
                 }
                 let username = username.unwrap();
-                if username.len() < 3 || username.len() > 32 {
+                if username.len() < MIN_USERNAME_LEN || username.len() > MAX_USERNAME_LEN {
                     return JoinError::UsernameInvalidLength {
-                        min_len: 3,
-                        max_len: 32,
+                        min_len: MIN_USERNAME_LEN as u16,
+                        max_len: MAX_USERNAME_LEN as u16,
                         specified_len: username.len(),
                     }
                     .respond_on_websocket(socket.await)
@@ -335,7 +342,7 @@ async fn handle_request(
                 // Because the `app.read().unwrap()` holds a read guard, we can't
                 // just run `JoinError::<x>.respond_on_websocket().await`,
                 // as the read guard can't be held across the `.await`
-                let password = params.remove("password").filter(String::is_empty);
+                let password = params.remove("password").filter(|p| !String::is_empty(p));
                 let mut err = None;
                 if let Some(room) = app.read().unwrap().get_room(&room_name) {
                     // If the room doesn't require a password but one was given,
@@ -362,7 +369,7 @@ async fn handle_request(
 
                 handle_connection(app, user, socket.await, addr).await;
             }
-            Err(e) => eprintln!("upgrade error: {}", e),
+            Err(e) => warn!("upgrade error: {}", e),
         }
     });
 
@@ -379,13 +386,18 @@ async fn handle_request(
 
 #[tokio::main]
 async fn main() {
+    let subscriber = tracing_subscriber::fmt()
+        .with_max_level(LevelFilter::TRACE)
+        .finish();
+    tracing::subscriber::set_global_default(subscriber).unwrap();
+
     let cli = Cli::parse();
 
     let addr = cli.ip;
     let listener = TcpListener::bind(addr).await.unwrap_or_else(|e| {
         panic!("Could not bind to {addr} - try specify a different port or IP address.\n{e}")
     });
-    println!("Hosting server on ws://{addr}");
+    info!("Hosting server on ws://{addr}");
 
     let app: AppState = Arc::new(RwLock::new(App::new()));
 
@@ -401,7 +413,7 @@ async fn main() {
                 .with_upgrades();
 
             if let Err(err) = conn.await {
-                eprintln!("failed to serve connection: {err:?}");
+                warn!("failed to serve connection: {err:?}");
             }
         });
     }

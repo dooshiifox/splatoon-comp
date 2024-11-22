@@ -39,6 +39,7 @@
 		"vitest": "^2.0.4"
 	},
 	"dependencies": {
-		"albtc": "^0.0.6"
+		"albtc": "^0.0.6",
+		"valibot": "1.0.0-beta.7"
 	}
 }

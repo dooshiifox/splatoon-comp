@@ -32,10 +32,7 @@ export function blockDefaultKeyAction(event: KeyboardEvent) {
 
 export const allowDefaultKeyAction = noop;
 
-export function keyHandler(
-	matches: Array<string>,
-	action: KeyHandler = blockDefaultKeyAction
-) {
+export function keyHandler(matches: Array<string>, action: KeyHandler = blockDefaultKeyAction) {
 	return (fn: Callable): KeyHandler => {
 		return (event) => {
 			if (matches.includes(event.key)) {
@@ -63,31 +60,30 @@ export const keyDown = keyHandler([ArrowDown]);
 export const keyHomePageUp = keyHandler([Home, PageUp]);
 export const keyEndPageDn = keyHandler([End, PageDown]);
 
-export function keyNavigation({
-	first,
-	previous,
-	next,
-	last,
-	orientation = "vertical"
-}: {
+export function keyNavigation(settings: {
 	first: Callable;
 	previous: Callable;
 	next: Callable;
 	last: Callable;
-	orientation?: Orientation;
+	readonly orientation?: Orientation;
 }): KeyHandler {
-	const handleFirst = keyHomePageUp(first);
-	const handlePrevious =
-		orientation === "vertical" ? keyUp(previous) : keyLeft(previous);
-	const handleNext =
-		orientation === "vertical" ? keyDown(next) : keyRight(next);
-	const handleLast = keyEndPageDn(last);
-
 	return (event) => {
-		handleFirst(event);
-		handlePrevious(event);
-		handleNext(event);
-		handleLast(event);
+		const prevKey = settings.orientation === "vertical" ? ArrowUp : ArrowLeft;
+		const nextKey = settings.orientation === "vertical" ? ArrowDown : ArrowRight;
+
+		if ([Home, PageUp].includes(event.key)) {
+			settings.first();
+		} else if ([End, PageDown].includes(event.key)) {
+			settings.last();
+		} else if (event.key === prevKey) {
+			settings.previous();
+		} else if (event.key === nextKey) {
+			settings.next();
+		} else {
+			return;
+		}
+
+		blockDefaultKeyAction(event);
 	};
 }
 

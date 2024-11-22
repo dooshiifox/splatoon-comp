@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use super::{Color, RoomUser};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -31,4 +33,17 @@ pub enum AccessLevel {
     View,
     Edit,
     Admin,
+}
+impl Display for AccessLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                AccessLevel::View => "view",
+                AccessLevel::Edit => "edit",
+                AccessLevel::Admin => "admin",
+            },
+        )
+    }
 }

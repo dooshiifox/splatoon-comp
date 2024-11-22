@@ -14,3 +14,10 @@ export function strAfter<const T extends string, const S extends string>(
 	// @ts-expect-error its fine this is just TS being wrong
 	return str.slice(starts.length);
 }
+
+export function clamp(num: number, min: number, max: number) {
+	return Math.min(Math.max(num, min), max);
+}
+export function roundToMultipleOf(num: number, multiple: number) {
+	return Math.round(num / multiple) * multiple;
+}

@@ -19,7 +19,7 @@ const deltaYmin = 0.0005;
 const scaleBoW = 1.14;
 const loBoWoffset = 0.027;
 const scaleWoB = 1.14;
-const loWoBoffset = 0.027;
+// const loWoBoffset = 0.027;
 
 function fclamp(Y: number) {
 	if (Y >= blkThrs) {
@@ -98,18 +98,47 @@ function hexToVec(col: string): [r: number, b: number, g: number] {
 		parseInt(col.substring(4, 6), 16)
 	];
 }
-export function getHighestContrast(text: string, backgrounds: Array<string>): string {
-	const textV = hexToVec(text);
+export function getHighestContrast(text: string, backgrounds: Array<string>): string;
+export function getHighestContrast(texts: Array<string>, background: string): string;
+export function getHighestContrast(
+	text: string | Array<string>,
+	background: Array<string> | string
+): string {
+	if (Array.isArray(text) && typeof background === "string") {
+		const bgV = hexToVec(background);
 
-	let highest: string = text;
-	let highestValue = 0;
-	for (const bg of backgrounds) {
-		const contrast = Math.abs(contrastAPCA(hexToVec(bg), textV));
-		if (contrast > highestValue) {
-			highestValue = contrast;
-			highest = bg;
+		let highest: string | undefined;
+		let highestValue = 0;
+		for (const t of text) {
+			const contrast = Math.abs(contrastAPCA(bgV, hexToVec(t)));
+			if (contrast > highestValue) {
+				highestValue = contrast;
+				highest = t;
+			}
 		}
-	}
+		if (highest === undefined) {
+			throw new Error("Issue get highest");
+		}
 
-	return highest;
+		return highest;
+	} else if (Array.isArray(background) && typeof text === "string") {
+		const textV = hexToVec(text);
+
+		let highest: string | undefined;
+		let highestValue = 0;
+		for (const bg of background) {
+			const contrast = Math.abs(contrastAPCA(hexToVec(bg), textV));
+			if (contrast > highestValue) {
+				highestValue = contrast;
+				highest = bg;
+			}
+		}
+		if (highest === undefined) {
+			throw new Error("Issue get highest");
+		}
+
+		return highest;
+	} else {
+		throw new Error("getHighestContrast was used wrong.");
+	}
 }

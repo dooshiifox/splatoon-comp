@@ -1,131 +1,132 @@
+import { SvelteMap } from "svelte/reactivity";
 import {
 	ariaBehavior,
-	reflectAriaActivedescendent,
 	reflectAriaLabel,
 	reflectAriaOrientation,
-	reflectAriaSelected,
 	setRole,
 	setTabIndex,
 	setType
 } from "./internal/aria.svelte";
-import {
-	applyBehaviors,
-	createWatchBehavior,
-	onDestroy
-} from "./internal/behavior.svelte";
+import { applyBehaviors, createWatchBehavior, onDestroy } from "./internal/behavior.svelte";
 import { onClick, onKeydown } from "./internal/events";
 import { setFocus } from "./internal/focus.svelte";
 import { keyNavigation, keySpaceOrEnter } from "./internal/key";
-import {
-	activate,
-	active,
-	firstActive,
-	focusByNode,
-	getItemValues,
-	getKey,
-	isKeyActive,
-	isKeySelected,
-	lastActive,
-	nextActive,
-	previousActive,
-	raiseSelectOnChange,
-	removeItem,
-	selectActive
-} from "./internal/list";
-import type {
-	Behavior,
-	Item,
-	ItemKey,
-	ItemOptions,
-	Labelable,
-	List,
-	ListItem,
-	Orientable,
-	Orientation,
-	Selectable
-} from "./internal/types";
-import {
-	getActionOption,
-	noop,
-	setUniqueNodeId
-} from "./internal/utils.svelte";
+import { activate, getKey, itemsEqual } from "./internal/list";
+import type { Item, ItemKey, Orientation } from "./internal/types";
+import { noop, setUniqueNodeId } from "./internal/utils.svelte";
 
 export type TabsConfig<T extends Item> = {
-	tabs: Array<HTMLElement>;
-	panels: Array<HTMLElement>;
-	auto: boolean;
-} & Labelable &
-	List<T> &
-	Selectable<T> &
-	Orientable;
+	readonly label: string;
+	selected: T | undefined;
+	readonly onselect: (value: T | undefined) => void;
+	readonly items: Array<{ value: T; disabled?: boolean }>;
+	readonly orientation: Orientation;
+};
 
-function reflectAriaTabControls<T extends Item>(store: Tabs<T>): Behavior {
-	return ariaBehavior(
-		"aria-controls",
-		(node) => store.panels[store.tabs.findIndex((tab) => tab === node)]?.id
-	);
-}
+class Tabs<T extends Item> {
+	private conf: TabsConfig<T>;
 
-function reflectAriaTabIndex<T extends Item>(
-	store: Tabs<T>,
-	itemState: ListItem<T>
-): Behavior {
-	return ariaBehavior("tabindex", () =>
-		isKeySelected(store.selected, getKey(itemState.value)) ? "0" : "-1"
-	);
-}
-
-function reflectAriaPanelLabelledBy<T extends Item>(store: Tabs<T>): Behavior {
-	return ariaBehavior(
-		"aria-labelledby",
-		(node) => store.tabs[store.panels.findIndex((panel) => panel === node)]?.id
-	);
-}
-
-function focusOnSelect<T extends Item>(
-	store: Tabs<T>,
-	itemState: ListItem<T>
-): Behavior {
-	return createWatchBehavior((node) => {
-		if (isKeySelected(store.selected, getKey(itemState.value)))
-			setFocus(node, true);
-	});
-}
-
-class Tabs<T extends Item> implements TabsConfig<T> {
-	tabs = $state<Array<HTMLElement>>([]);
-	panels = $state<Array<HTMLElement>>([]);
-	auto = $state(true);
-
-	label = $state("");
-	items = $state<Array<ListItem<T>>>([]);
-	active = $state<number | null>(null);
-	selected = $state<Array<T>>([]);
-	get value(): T | undefined {
-		return this.selected[0];
+	private itemsToElements = $state<
+		SvelteMap<ItemKey<T>, { tab: HTMLElement | undefined; panel: HTMLElement | undefined }>
+	>(new SvelteMap());
+	assignElementToItem(item: T | ItemKey<T>, type: "tab" | "panel", node: HTMLElement) {
+		this.itemsToElements.set(getKey(item), { ...this.getElementsFromItem(item), [type]: node });
 	}
-	multi = false;
-	onselect = $state<(value: Array<T>) => void>(noop);
+	unassignElementFromItem(item: T | ItemKey<T>, type: "tab" | "panel", node: HTMLElement) {
+		// Make sure that its the same element first!
+		if (this.getElementsFromItem(item)[type] === node) {
+			const el = { ...this.getElementsFromItem(item), [type]: undefined };
+			if (el.panel === undefined && el.tab === undefined) {
+				this.itemsToElements.delete(getKey(item));
+			} else {
+				this.itemsToElements.set(getKey(item), el);
+			}
+		}
+	}
+	getElementsFromItem(item: T | ItemKey<T>): {
+		tab: HTMLElement | undefined;
+		panel: HTMLElement | undefined;
+	} {
+		return (
+			this.itemsToElements.get(getKey(item)) ?? {
+				tab: undefined,
+				panel: undefined
+			}
+		);
+	}
+	getItemKeyFromElement(node: HTMLElement) {
+		return this.itemsToElements
+			.entries()
+			.find(([, el]) => el.tab?.id === node.id || el.panel?.id === node.id)?.[0];
+	}
+	getItemIndexFromElement(node: HTMLElement) {
+		const key = this.getItemKeyFromElement(node);
+		if (key === undefined) return undefined;
+		return this.getItemIndex(key);
+	}
+	active = $state<number | null>(null);
 
-	orientation = $state<Orientation>("vertical");
+	get label() {
+		return this.conf.label;
+	}
+	get selected() {
+		return this.conf.selected;
+	}
+	set selected(val) {
+		this.conf.selected = val;
+	}
+	get items() {
+		return this.conf.items;
+	}
+	get onselect() {
+		return this.conf.onselect;
+	}
+	get orientation() {
+		return this.conf.orientation;
+	}
 
 	constructor(init?: Partial<TabsConfig<T>>) {
-		this.reinit(init);
+		let selected = $state<T | undefined>(init?.items?.[0]?.value);
+		const conf: TabsConfig<T> = Object.defineProperties(
+			{
+				label: "",
+				orientation: "horizontal",
+				get selected() {
+					return selected;
+				},
+				set selected(val) {
+					selected = val;
+				},
+				onselect: noop,
+				items: []
+			},
+			Object.getOwnPropertyDescriptors(init)
+		);
+
+		this.conf = conf;
+		this.active = this.selected ? (this.getItemIndex(this.selected) ?? null) : null;
 	}
 
-	reinit(init?: Partial<TabsConfig<T>>) {
-		this.tabs = init?.tabs ?? this.tabs;
-		this.panels = init?.panels ?? this.panels;
-		this.auto = init?.auto ?? this.auto;
+	getItem(item: T | ItemKey<T>) {
+		return this.items.find((searchItem) => itemsEqual(item, searchItem.value));
+	}
+	getItemIndex(item: T | ItemKey<T>): number | undefined {
+		const index = this.items.findIndex((searchItem) => itemsEqual(item, searchItem.value));
+		if (index === -1) return undefined;
+		return index;
+	}
 
-		this.label = init?.label ?? this.label;
-		this.items = init?.items ?? this.items;
-		this.active = init?.active ?? this.active;
-		this.selected = init?.selected ?? this.selected;
-		this.multi = init?.multi ?? this.multi;
-		this.onselect = init?.onselect ?? this.onselect;
-
-		this.orientation = init?.orientation ?? this.orientation;
+	/** Returns the first non-disabled item in the list. */
+	firstActive(): number | null {
+		const index = this.items.findIndex((item) => item.disabled !== true);
+		if (index === -1) return null;
+		return index;
+	}
+	/** Returns the last non-disabled item in the list. */
+	lastActive(): number | null {
+		const index = this.items.findLastIndex((item) => item.disabled !== true);
+		if (index === -1) return null;
+		return index;
 	}
 
 	focus(newActive: number | null) {
@@ -136,30 +137,75 @@ class Tabs<T extends Item> implements TabsConfig<T> {
 
 	/** Focuses the first active element in the list. */
 	focusFirst() {
-		this.focus(firstActive(this.items));
+		this.focus(this.firstActive());
 	}
 	/** Focuses the last active element in the list. */
 	focusLast() {
-		this.focus(lastActive(this));
+		this.focus(this.lastActive());
+	}
+	/** Returns the index of the next non-disabled item in the list. */
+	nextActive(): number | null {
+		let index = this.active ?? -1;
+		while (++index < this.items.length) {
+			if (this.items[index].disabled !== true) {
+				return index;
+			}
+		}
+
+		// No next item. We were already on the last selectable item
+		// or no items *can* be selected
+		return this.active;
+	}
+	/** Returns the index of the previous non-disabled item in the list.
+	 *
+	 *  In the event there is no selected item, it finds from the end of the list.
+	 *  Returns `null` if there are no non-disabled items.
+	 */
+	previousActive() {
+		let index = this.active ?? this.items.length;
+		while (--index > -1) {
+			if (this.items[index].disabled !== true) {
+				return index;
+			}
+		}
+
+		// No previous item. We were already on the first selectable item.
+		return this.active;
 	}
 
 	/** Focuses the previous active element in the list. */
 	focusPrevious() {
-		this.focus(previousActive(this));
+		this.focus(this.previousActive());
 	}
 	/** Focuses the next active element in the list. */
 	focusNext() {
-		this.focus(nextActive(this));
+		this.focus(this.nextActive());
 	}
 
 	/** Finds a list item by its node and focuses it. */
 	focusByNode(node: HTMLElement | null) {
-		focusByNode(this, (index) => this.focus(index), node);
+		if (node === null) {
+			this.focus(null);
+			return;
+		}
+
+		const index = this.getItemIndexFromElement(node);
+		if (index === undefined || this.items[index].disabled === true) {
+			this.focus(null);
+			return;
+		}
+		this.focus(index);
 	}
 
-	/** Removes a list item from the list. */
-	remove(node: HTMLElement) {
-		this.items = removeItem(this.items, node);
+	private selectActive() {
+		if (this.active === null || this.items[this.active]?.disabled === true) {
+			return this.selected;
+		}
+
+		// set selected item
+		const value = this.getActiveItem();
+		if (value === undefined) return this.selected;
+		return value.value;
 	}
 
 	/** Sets a new `selected` array.
@@ -168,24 +214,39 @@ class Tabs<T extends Item> implements TabsConfig<T> {
 	 *  - Else, it sets the array to the active value.
 	 */
 	select() {
-		this.selected = selectActive(this);
+		const newSelected = this.selectActive();
+		if (newSelected !== undefined) {
+			this.selected = newSelected;
+			this.onselect(newSelected);
+		}
 	}
 
 	/** Returns if the item is currently selected. */
-	isSelected(item: T) {
-		return isKeySelected(this.selected, getKey(item));
+	isSelected(item: T | ItemKey<T>) {
+		return this.selected !== undefined && itemsEqual(this.selected, item);
 	}
-	/** Returns if the item is currently selected by the item's key. */
-	isKeySelected(key: ItemKey<T>) {
-		return isKeySelected(this.selected, key);
+	/** Returns the active item. */
+	getActiveItem() {
+		if (
+			this.active === null ||
+			this.active < 0 ||
+			this.active >= this.items.length ||
+			this.items.length === 0
+		) {
+			return undefined;
+		}
+
+		return this.items[this.active];
 	}
 	/** Returns if the item is currently active. */
-	isActive(item: T) {
-		return isKeyActive(this, getKey(item));
+	isActive(item: T | ItemKey<T>) {
+		const active = this.getActiveItem();
+		if (active === undefined) return false;
+		return itemsEqual(active.value, item);
 	}
-	/** Returns if the item is currently active by the item's key. */
-	isKeyActive(key: ItemKey<T>) {
-		return isKeyActive(this, key);
+	/** Returns if the given item is disabled. */
+	isDisabled(item: T | ItemKey<T>) {
+		return this.getItem(item)?.disabled === true;
 	}
 }
 
@@ -224,95 +285,74 @@ export function createTabs<T extends Item>(init?: Partial<TabsConfig<T>>) {
 					previous: () => state.focusPrevious(),
 					next: () => state.focusNext(),
 					last: () => state.focusLast(),
-					orientation: state.orientation
+					get orientation() {
+						return state.orientation;
+					}
 				})
 			),
-			reflectAriaActivedescendent(state),
-			createWatchBehavior(() => {
-				if (!state.auto) return;
-
-				const selectedIndex = state.items.findIndex(
-					(item) => state.value === item.value
-				);
-				if (selectedIndex === -1 && state.active !== null) {
-					state.select();
-				} else if (state.active !== selectedIndex) {
-					state.select();
-				}
-			}),
-			raiseSelectOnChange(state)
-		]);
-
-		return {
-			destroy
-		};
-	}
-
-	function tab(node: HTMLElement, options: ItemOptions<T>) {
-		setUniqueNodeId(node, prefixTab);
-		state.tabs.push(node);
-
-		const optionValue = getActionOption(() => options.value);
-		const optionDisabled = getActionOption(() => options.disabled);
-		const optionText = getActionOption(() => options.text);
-
-		const itemState = getItemValues<T>(node, {
-			get value() {
-				return optionValue.value;
-			},
-			get disabled() {
-				return optionDisabled.value;
-			},
-			get text() {
-				return optionText.value;
-			}
-		});
-
-		state.items.push(itemState);
-
-		if (state.value === itemState.value) {
-			state.active = state.tabs.length - 1;
-		}
-
-		const destroy = applyBehaviors(node, [
-			setType("button"),
-			setRole("tab"),
-			reflectAriaSelected(state, itemState),
-			reflectAriaTabIndex(state, itemState),
-			reflectAriaTabControls(state),
-			focusOnSelect(state, itemState),
-			onDestroy(() => {
-				state.remove(node);
-				optionValue.destroy();
-				optionDisabled.destroy();
-				optionText.destroy();
+			ariaBehavior("aria-activedescendant", () => {
+				const active = state.getActiveItem();
+				if (active === undefined) return "";
+				return state.getElementsFromItem(active.value)?.tab?.id ?? "";
 			})
 		]);
 
 		return {
-			update(opts: ItemOptions<T>) {
-				optionValue.update(() => opts.value);
-				optionDisabled.update(() => opts.disabled);
-				optionText.update(() => opts.text);
+			destroy
+		};
+	}
+
+	function tab(node: HTMLElement, initialValue: T | ItemKey<T>) {
+		setUniqueNodeId(node, prefixTab);
+		let value = $state(initialValue);
+		state.assignElementToItem(value, "tab", node);
+
+		const destroy = applyBehaviors(node, [
+			setType("button"),
+			setRole("tab"),
+			ariaBehavior("aria-selected", () => state.isSelected(value)),
+			ariaBehavior("tabindex", () => (state.isSelected(value) ? "0" : "-1")),
+			ariaBehavior("aria-controls", () => state.getElementsFromItem(value).panel?.id),
+			createWatchBehavior((node) => {
+				if (state.isSelected(value)) setFocus(node, true);
+			}),
+			onDestroy(() => {
+				state.unassignElementFromItem(value, "tab", node);
+			})
+		]);
+
+		return {
+			update(updatedValue: T | ItemKey<T>) {
+				if (getKey(updatedValue) === getKey(value)) return;
+				state.unassignElementFromItem(value, "tab", node);
+				value = updatedValue;
+				state.assignElementToItem(updatedValue, "tab", node);
 			},
 			destroy
 		};
 	}
 
-	function panel(node: HTMLElement) {
+	function panel(node: HTMLElement, initialValue: T | ItemKey<T>) {
 		setUniqueNodeId(node, prefixPanel);
-		state.panels.push(node);
+		let value = $state(initialValue);
+		state.assignElementToItem(value, "panel", node);
 
 		const destroy = applyBehaviors(node, [
 			setTabIndex(0),
 			setRole("tabpanel"),
-			reflectAriaPanelLabelledBy(state),
-			// reflectAriaDisabled(store),
-			onDestroy(() => state.remove(node))
-			// set to be visible / hidden based on selected state?
+			ariaBehavior("aria-labelledby", () => state.getElementsFromItem(value).tab?.id),
+			onDestroy(() => {
+				state.unassignElementFromItem(value, "tab", node);
+			})
 		]);
 
 		return {
+			update(updatedValue: T | ItemKey<T>) {
+				if (getKey(updatedValue) === getKey(value)) return;
+				state.unassignElementFromItem(value, "panel", node);
+				value = updatedValue;
+				state.assignElementToItem(updatedValue, "panel", node);
+			},
 			destroy
 		};
 	}
@@ -329,32 +369,27 @@ export function createTabs<T extends Item>(init?: Partial<TabsConfig<T>>) {
 		/** A Svelte action to place on a tab's panel. */
 		panel,
 		/** Returns if the item is currently selected. */
-		isSelected(item: T) {
+		isSelected(item: T | ItemKey<T>) {
 			return state.isSelected(item);
 		},
-		/** Returns if the item is currently selected by the item's key. */
-		isKeySelected(key: ItemKey<T>) {
-			return state.isKeySelected(key);
-		},
 		/** Returns if the item is currently active. */
-		isActive(item: T) {
+		isActive(item: T | ItemKey<T>) {
 			return state.isActive(item);
 		},
-		/** Returns if the item is currently active by the item's key. */
-		isKeyActive(key: ItemKey<T>) {
-			return state.isKeyActive(key);
+		/** The currently-selected tab. */
+		get selected() {
+			return state.selected;
 		},
 		/** The current active tab.
 		 *
-		 *  This is *not* the selected item. This is the hovered item or
-		 *  keyboard-navigated item. `undefined` if no item is currently selected.
+		 *  This is *not* the selected tab. This is the hovered tab or
+		 *  keyboard-navigated tab. `undefined` if no tab is currently selected.
 		 */
 		get active() {
-			return active(state);
+			return state.getActiveItem();
 		},
-		/** The currently-selected tab. `undefined` if no tab is selected. */
-		get selected() {
-			return state.value;
+		get items() {
+			return state.items;
 		},
 		/** Provides access to the internal `Tabs` class where the state lives.
 		 *  This is useful for updating other state, for example `label`.

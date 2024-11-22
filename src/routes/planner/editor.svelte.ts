@@ -1,8 +1,8 @@
 import { dev } from "$app/environment";
+import { tweenedState } from "$lib/tween.svelte";
 import { uuid } from "$lib/uuid";
 import { copyText, unreachable, type OptionalKeys } from "albtc";
 import { linear, quadOut } from "svelte/easing";
-import { tweened, type TweenedOptions } from "svelte/motion";
 import { SvelteMap, SvelteSet } from "svelte/reactivity";
 
 function clamp(num: number, min: number, max: number) {
@@ -42,26 +42,6 @@ function canAcceptKeyboardEvents(e: KeyboardEvent) {
 		(e.target as HTMLElement).nodeName.toLowerCase() !== "textarea" &&
 		(e.target as HTMLElement).nodeName.toLowerCase() !== "input"
 	);
-}
-
-function tweenedState<T>(value: T, defaults: TweenedOptions<T> = {}) {
-	let _target = $state(value);
-	let current = $state(value);
-	const store = tweened(value, defaults);
-	$effect(() => store.subscribe((c) => (current = c)));
-
-	return {
-		get animated() {
-			return current;
-		},
-		get target() {
-			return _target;
-		},
-		setValue(target: T, opts?: TweenedOptions<T>) {
-			_target = target;
-			store.set(target, opts);
-		}
-	};
 }
 
 type EditorEvent = {
