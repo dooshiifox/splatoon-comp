@@ -1,41 +1,126 @@
 import { dev } from "$app/environment";
+import { clamp } from "$lib";
+import { Color } from "$lib/color.svelte";
 import { tweenedState } from "$lib/tween.svelte";
 import { uuid } from "$lib/uuid";
 import { copyText, unreachable, type OptionalKeys } from "albtc";
 import { linear, quadOut } from "svelte/easing";
 import { SvelteMap, SvelteSet } from "svelte/reactivity";
 
-function clamp(num: number, min: number, max: number) {
-	return Math.max(min, Math.min(max, num));
-}
+// Colors from the server are always returned in #rrggbbaa format.
+const vColor = v.pipe(
+	v.string(),
+	v.hexColor(),
+	v.transform((c) => Color.fromRgb(c)!)
+);
+const vPercentage = v.pipe(v.number(), v.minValue(0), v.maxValue(1));
 
-function applyScale(n: number, scale: ContentCommon["scale"]) {
+const vCanvas = v.pipe(v.number(), v.minValue(0), v.maxValue(65535));
+const vUuid = v.pipe(v.string(), v.uuid());
+const vAccessLevel = v.picklist(["view", "edit", "admin"]);
+const vUser = v.object({
+	color: vColor,
+	username: v.string(),
+	canvas: vCanvas,
+	uuid: vUuid,
+	access_level: vAccessLevel
+});
+type User = v.InferOutput<typeof vUser>;
+
+const vElementAnchor = v.object({
+	top: vPercentage,
+	left: vPercentage
+});
+
+const vTextAlignment = v.picklist(["left", "center", "right", "justify"]);
+const vTextFont = v.object({
+	font_type: v.picklist(["sans", "serif", "mono"]),
+	custom_font_family: v.optional(v.nullable(v.string()), null)
+});
+const vElementText = v.object({
+	type: v.literal("text"),
+	content: v.string(),
+	align: vTextAlignment,
+	color: vColor,
+	size: v.pipe(v.number(), v.minValue(0)),
+	font: vTextFont,
+	background_color: vColor,
+	background_blur: v.pipe(v.number(), v.minValue(0))
+});
+
+const vImageCrop = v.object({
+	left: vPercentage,
+	top: vPercentage,
+	right: vPercentage,
+	bottom: vPercentage
+});
+const vImageText = v.object({
+	x: vPercentage,
+	y: vPercentage,
+	anchor: vElementAnchor,
+	text: vElementText
+});
+
+const vElementImage = v.object({
+	type: v.literal("image"),
+	url: v.string(),
+	alt: v.string(),
+	scale_x: v.number(),
+	scale_y: v.number(),
+	crop: vImageCrop,
+	outline_color: vColor,
+	outline_thickness: v.pipe(v.number(), v.minValue(0)),
+	outline_blur: v.pipe(v.number(), v.minValue(0)),
+	text: v.array(vImageText)
+});
+
+const vElementType = v.variant("type", [vElementText, vElementImage]);
+
+const vScaleRate = v.picklist(["none", "base"]);
+type ScaleRate = v.InferOutput<typeof vScaleRate>;
+const vElement = v.object({
+	uuid: vUuid,
+	ty: vElementType,
+	last_edited_by: vUuid,
+	selected_by: v.array(vUuid),
+	x: v.number(),
+	y: v.number(),
+	anchor: vElementAnchor,
+	rotation: v.number(),
+	scale_rate: vScaleRate,
+	z_index: v.number(),
+	groups: v.pipe(
+		v.array(v.string()),
+		v.transform((i) => new SvelteSet(i))
+	)
+});
+type Element = v.InferOutput<typeof vElement>;
+
+const vMsgJoin = v.object({
+	type: v.literal("join"),
+	user: vUser
+});
+const vMsgOnJoin = v.object({
+	type: v.literal("on_join"),
+	user: vUser,
+	users: v.array(vUser),
+	elements: v.array(vElement)
+});
+const vMsgDisconnect = v.object({
+	type: v.literal("disconnect"),
+	user: vUuid
+});
+const vMsgUserChange = v.object({
+	type: v.literal("user_change"),
+	user: vUser
+});
+const vMsg = v.variant("type", [vMsgJoin, vMsgOnJoin, vMsgDisconnect, vMsgUserChange]);
+
+function applyScale(n: number, scale: ScaleRate) {
 	if (scale === "none") return 1;
 	if (scale === "base") return n ** -0.5;
 	unreachable(scale);
 }
-
-type Content = ContentCommon & ContentTypes;
-type ContentCommon = {
-	id: string;
-	selectable: boolean;
-	centerX: number;
-	centerY: number;
-	scale: "none" | "base";
-	zIndex: number;
-	groups: SvelteSet<string>;
-};
-type ContentTypes = ContentText | ContentImage;
-type ContentText = {
-	type: "text";
-	content: string;
-	color: string;
-	font: "sans" | "mono" | "splatoon-text" | "splatoon-block";
-};
-type ContentImage = {
-	type: "image";
-	url: string;
-};
 
 function canAcceptKeyboardEvents(e: KeyboardEvent) {
 	return (
@@ -104,7 +189,7 @@ export class Editor {
 		return "cursor-auto";
 	}
 
-	elements = $state<Record<string, Content>>({});
+	elements = $state<Record<string, Element>>({});
 
 	constructor(conf: Conf) {
 		this.conf = conf;
@@ -209,12 +294,12 @@ export class Editor {
 				JSON.stringify(
 					[...this.selected].map((id) => {
 						const el = this.getElement(id);
-						if (el?.type === "text") {
+						if (el?.ty.type === "text") {
 							return {
 								type: "callout",
-								x: Math.round(el.centerX),
-								y: Math.round(el.centerY),
-								content: el.content
+								x: Math.round(el.x),
+								y: Math.round(el.y),
+								content: el.ty.content
 							};
 						}
 					})
@@ -238,7 +323,7 @@ export class Editor {
 		} else if (e.code === "KeyA" && e.ctrlKey) {
 			// Select all elements
 			for (const el of Object.values(this.elements)) {
-				if (el.selectable) this.selectElement(el.id);
+				if (this.isElementSelectable(el)) this.selectElement(el.uuid);
 			}
 			e.preventDefault();
 			e.stopImmediatePropagation();
@@ -313,8 +398,8 @@ export class Editor {
 				if (!el) return;
 
 				this.updateElement(id, {
-					centerX: el.centerX + e.movementX / this.zoom.animated,
-					centerY: el.centerY + e.movementY / this.zoom.animated
+					x: el.x + e.movementX / this.zoom.animated,
+					y: el.y + e.movementY / this.zoom.animated
 				});
 			});
 		}
@@ -492,49 +577,68 @@ export class Editor {
 	 *  Returns the ID of the newly-added element.
 	 */
 	addElement(
-		el: OptionalKeys<ContentCommon, "id" | "selectable" | "scale" | "zIndex" | "groups"> &
-			ContentTypes
+		el: OptionalKeys<
+			Element,
+			| "uuid"
+			| "scale_rate"
+			| "z_index"
+			| "rotation"
+			| "groups"
+			| "anchor"
+			| "selected_by"
+			| "last_edited_by"
+		>
 	): string {
-		const elementAdded: Content = {
-			id: this.genId(),
-			selectable: true,
-			scale: "base",
-			zIndex: Object.values(this.elements).reduce((p, c) => Math.max(p, c.zIndex), 0),
+		const elementAdded: Element = {
+			uuid: this.genId(),
+			scale_rate: "base",
+			z_index: Object.values(this.elements).reduce((p, c) => Math.max(p, c.z_index), 0),
 			groups: new SvelteSet(),
+			anchor: {
+				top: 0.5,
+				left: 0.5
+			},
+			rotation: 0,
+			last_edited_by: "TODO:",
+			selected_by: ["TODO:"],
 			...el
 		};
-		this.elements[elementAdded.id] = elementAdded;
+		this.elements[elementAdded.uuid] = elementAdded;
 
 		this.deselectAllElements();
-		if (elementAdded.selectable) {
-			this.selectElement(elementAdded.id);
+		if (this.isElementSelectable(elementAdded)) {
+			this.selectElement(elementAdded.uuid);
+			this.queuedFocus = elementAdded.uuid;
+		} else {
+			this.queuedFocus = undefined;
 		}
-		this.queuedFocus = elementAdded.selectable ? elementAdded.id : undefined;
 
-		return elementAdded.id;
+		return elementAdded.uuid;
 	}
 
 	/** Retrieves information about an element. */
-	getElement<T extends Content["type"] | undefined = undefined>(
+	getElement<T extends Element["ty"]["type"] | undefined = undefined>(
 		id: string,
 		type?: T
-	): T extends undefined ? Content | undefined : Extract<Content, { type: T }> {
+	): T extends undefined
+		? Element | undefined
+		: { ty: Extract<Element["ty"], { type: T }> } & Omit<Element, "ty"> {
 		const found = this.elements[id];
 		// @ts-expect-error because of return type
 		if (type === undefined) return found;
-		if (found?.type !== type) throw new Error(`Expected ${id} to be ${type}, got ${found?.type}`);
+		if (found?.ty.type !== type) {
+			throw new Error(`Expected ${id} to be ${type}, got ${found?.ty.type}`);
+		}
 		// @ts-expect-error because of return type
 		return found;
 	}
-	getElementsInGroup(group: string): Array<Content> {
+	getElementsInGroup(group: string): Array<Element> {
 		return Object.values(this.elements).filter((el) => el.groups.has(group));
 	}
 
 	/** Updates an element by its ID */
-	updateElement(id: string, data: Partial<Omit<ContentCommon, "id"> & ContentTypes>) {
+	updateElement(id: string, data: Partial<Omit<Element, "uuid">>) {
 		if (id in this.elements) {
-			// @ts-expect-error because of "type" property. technically it
-			// is unsafe but i dont feel like fixing it.
 			this.elements[id] = {
 				...this.elements[id],
 				...data
@@ -548,6 +652,12 @@ export class Editor {
 		this.deselectElement(id);
 	}
 
+	/** Checks if an element is allowed to be selected. */
+	isElementSelectable(element: string | Element) {
+		const el = typeof element === "string" ? this.getElement(element) : element;
+		return !el?.groups.has("locked");
+	}
+
 	locateElementFromNode(node: HTMLElement): string | null {
 		while (node.dataset["id"] === undefined) {
 			if (node.parentElement === null) {
@@ -559,7 +669,7 @@ export class Editor {
 
 		const id = node.dataset["id"];
 		const element = this.getElement(id);
-		if (!element || !element.selectable) {
+		if (!element || !this.isElementSelectable(element)) {
 			return null;
 		}
 
@@ -571,7 +681,7 @@ export class Editor {
 	}
 	getScale(id: string) {
 		const el = this.getElement(id);
-		return applyScale(this.zoom.animated, el?.scale ?? "base");
+		return applyScale(this.zoom.animated, el?.scale_rate ?? "base");
 	}
 }
 
@@ -681,5 +791,338 @@ class TouchPoints {
 	/** The number of currently-registered points. */
 	get length(): number {
 		return this.points.size;
+	}
+}
+
+const PROTOCOL = 1;
+import * as v from "valibot";
+
+type CallbackCollection<T> = Array<(arg: T) => unknown>;
+
+export class RoomCollab {
+	connectionState = $state<"connecting" | "open" | "closing" | "closed">("closed");
+
+	private conn: WebSocket | undefined;
+
+	private awaitOpenCallbacks: CallbackCollection<Event> = [];
+	private awaitCloseCallbacks: CallbackCollection<CloseEvent> = [];
+	private awaitErrorCallbacks: CallbackCollection<Event | undefined> = [];
+	private awaitMessageCallbacks: CallbackCollection<MessageEvent | undefined> = [];
+
+	state = $state<RoomCollabState>();
+
+	constructor() {}
+
+	async connect(url: string, room: string, username: string, color?: string, password?: string) {
+		if (this.isConnectionOpen()) {
+			await this.disconnect();
+		}
+
+		const p: Record<string, string> = {
+			protocol: PROTOCOL.toString(),
+			room,
+			username
+		};
+		if (color) {
+			p.color = color;
+		}
+		if (password) {
+			p.password = password;
+		}
+
+		try {
+			this.conn = new WebSocket(`${url}?${new URLSearchParams(p).toString()}`);
+		} catch (e) {
+			console.error("Failed to connect to server", e);
+			throw new Error("Failed to connect to server.");
+		}
+
+		this.connectionState = "connecting";
+		this.conn.addEventListener("open", (e) => {
+			// Call all open event listeners
+			this.connectionState = "open";
+			this.awaitOpenCallbacks.forEach((cb) => cb(e));
+			this.awaitOpenCallbacks = [];
+		});
+		this.conn.addEventListener("close", (e) => {
+			// Call all close event listeners
+			this.connectionState = "closed";
+			this.conn = undefined;
+			this.state = undefined;
+			this.awaitCloseCallbacks.forEach((cb) => cb(e));
+			this.awaitCloseCallbacks = [];
+			this.awaitErrorCallbacks.forEach((cb) => cb(undefined));
+			this.awaitErrorCallbacks = [];
+			this.awaitMessageCallbacks.forEach((cb) => cb(undefined));
+			this.awaitMessageCallbacks = [];
+		});
+		this.conn.addEventListener("error", (e) => {
+			// Call all error event listeners
+			this.awaitErrorCallbacks.forEach((cb) => cb(e));
+			this.awaitErrorCallbacks = [];
+		});
+		this.conn.addEventListener("message", (e) => {
+			// Call all message event listeners
+			// Try parse as JSON.
+			let data = undefined;
+			try {
+				data = JSON.parse(e.data);
+			} catch {
+				// Couldn't parse, oh well.
+				console.warn("Got message from server we couldn't decode:", e);
+			}
+			if (data !== undefined) {
+				this.onMessage(data, e);
+			}
+			this.awaitMessageCallbacks.forEach((cb) => cb(e));
+			this.awaitMessageCallbacks = [];
+		});
+
+		// Wait for either an error, a close, or a first message
+		const event = await Promise.any([this.awaitError(), this.awaitClose(), this.awaitMessage()]);
+		if (event === undefined) {
+			// `awaitError` and `awaitMessage` can return undefined, only if
+			// the socket is closed, but if the socket is closed then
+			// `awaitClose` will return first and return an event.
+			// If we get undefined, our reasoning has gone wrong somewhere.
+			throw new Error("Something went horribly wrong?");
+		}
+
+		// If it was an error we received, tell the user
+		if (event.type === "error") {
+			console.error("Failed to connect to server: Error", event);
+			throw new Error("Failed to connect to server.");
+		} else if (event.type === "close") {
+			this.handleJoinError(event as CloseEvent);
+		} else if (event.type === "message") {
+			// Yippee! it worked!
+			// Handling the 'on_join' response is done by the `onMessage` handler.
+		}
+	}
+
+	handleJoinError(event: CloseEvent): never {
+		// Try parse what type of error it was and give feedback to
+		// the user.
+		console.log("An issue occured connecting to server: Close", event);
+		let reason;
+		try {
+			reason = JSON.parse((event as CloseEvent).reason);
+		} catch {
+			console.warn("^^^ JSON parsing error.");
+			throw new Error("Failed to connect to server.");
+		}
+
+		const validate = v.variant("type", [
+			v.object({
+				type: v.picklist([
+					"room_missing",
+					"username_missing",
+					"color_invalid",
+					"password_required",
+					"password_incorrect"
+				])
+			}),
+			v.object({
+				type: v.literal("protocol_error"),
+				server: v.pipe(v.number(), v.minValue(0))
+			}),
+			v.object({
+				type: v.literal("room_invalid_length"),
+				min_len: v.pipe(v.number(), v.minValue(0)),
+				max_len: v.pipe(v.number(), v.minValue(0)),
+				specified_len: v.pipe(v.number(), v.minValue(0))
+			}),
+			v.object({
+				type: v.literal("username_invalid_length"),
+				min_len: v.pipe(v.number(), v.minValue(0)),
+				max_len: v.pipe(v.number(), v.minValue(0)),
+				specified_len: v.pipe(v.number(), v.minValue(0))
+			})
+		]);
+		const close = v.safeParse(validate, reason);
+		if (!close.success) {
+			console.warn("^^^ Validation error.");
+			throw new Error("Failed to connect to server.");
+		}
+		const r = close.output;
+
+		if (r.type === "protocol_error") {
+			// check our protocol vs the server's
+			if (r.server > PROTOCOL) {
+				throw new Error(
+					"The server is using a newer communication protocol. Try refresh the webpage."
+				);
+			} else {
+				throw new Error(
+					"The server is using an outdated communication protocol. Try again shortly, or bug the server admin to update it."
+				);
+			}
+		} else if (r.type === "room_missing") {
+			throw new Error("Please specify the name of the room to create or join!");
+		} else if (r.type === "room_invalid_length") {
+			if (r.min_len > r.specified_len) {
+				throw new Error(
+					`That room name is too short! Yours is ${r.specified_len} characters, but the minimum is ${r.min_len} characters.`
+				);
+			} else {
+				throw new Error(
+					`That room name is too long! Yours is ${r.specified_len} characters, but the maximum is ${r.max_len} characters.`
+				);
+			}
+		} else if (r.type === "username_missing") {
+			throw new Error("Please enter a username to join with!");
+		} else if (r.type === "username_invalid_length") {
+			if (r.min_len > r.specified_len) {
+				throw new Error(
+					`That username is too short! Yours is ${r.specified_len} characters, but the minimum is ${r.min_len} characters.`
+				);
+			} else {
+				throw new Error(
+					`That username is too long! Yours is ${r.specified_len} characters, but the maximum is ${r.max_len} characters.`
+				);
+			}
+		} else if (r.type === "color_invalid") {
+			throw new Error("That color doesn't seem valid. Please choose another!");
+		} else if (r.type === "password_required") {
+			throw new Error("A password is required to join this room.");
+		} else if (r.type === "password_incorrect") {
+			throw new Error("Sorry, that password isn't correct! Please try again.");
+		} else {
+			unreachable(r.type);
+		}
+	}
+
+	isConnectionConnecting(): boolean {
+		return this.conn !== undefined && this.conn.readyState === this.conn.CONNECTING;
+	}
+	isConnectionOpen(): boolean {
+		return this.conn !== undefined && this.conn.readyState === this.conn.OPEN;
+	}
+	isConnectionClosed(): boolean {
+		return this.conn === undefined || this.conn.readyState === this.conn.CLOSED;
+	}
+
+	/** Disconnects from the current client.
+	 *
+	 *  Resolves after disconnect.
+	 */
+	async disconnect() {
+		// Already disconnected
+		if (this.isConnectionClosed()) return;
+
+		const onClose = this.awaitClose();
+		// Need to close the connection if not already closing
+		// Regardless, we need to await the promise.
+		if (this.conn !== undefined && this.conn.readyState !== this.conn.CLOSING) {
+			this.conn!.close();
+			this.connectionState = "closing";
+		}
+
+		await onClose;
+		// close event listener handles setting all the state
+	}
+
+	onMessage(json: unknown, _e: MessageEvent) {
+		const resp = v.safeParse(vMsg, json);
+		if (!resp.success) {
+			console.warn("Couldn't parse server message as a valid response:", json, resp.issues);
+			return;
+		}
+
+		const msg = resp.output;
+		if (msg.type === "on_join") {
+			this.state = new RoomCollabState(msg.user.uuid, msg.users);
+			return;
+		}
+		if (!this.state) {
+			console.warn("Got message data but room state doesn't exist yet.");
+			return;
+		}
+
+		if (msg.type === "join") {
+			this.state.userJoined(msg.user);
+		} else if (msg.type === "disconnect") {
+			this.state.userDisconnected(msg.user);
+		} else if (msg.type === "user_change") {
+			this.state.userChanged(msg.user);
+		} else {
+			unreachable(msg);
+		}
+	}
+
+	/** Awaits for the connection to become open from the connecting state.
+	 *
+	 *  If the connection is already open, closing, or closed, this will
+	 *  resolve instantly.
+	 */
+	awaitOpen() {
+		if (!this.isConnectionConnecting()) return;
+
+		return new Promise<Event>((res) => {
+			this.awaitOpenCallbacks.push(res);
+		});
+	}
+	/** Awaits for the connection to close.
+	 *
+	 *  If the connection is already closed, this will resolve instantly.
+	 */
+	awaitClose() {
+		if (this.isConnectionClosed()) return;
+
+		return new Promise<CloseEvent>((res) => {
+			this.awaitCloseCallbacks.push(res);
+		});
+	}
+	/** Awaits for the connection to experience an error.
+	 *
+	 *  If the connection is closed, this will resolve instantly. If the
+	 *  connection closes without an error occurring, this will resolve
+	 *  with `undefined`.
+	 */
+	awaitError() {
+		if (this.isConnectionClosed()) return;
+
+		return new Promise<Event | undefined>((res) => {
+			this.awaitErrorCallbacks.push(res);
+		});
+	}
+	/** Awaits for the connection to receive a message.
+	 *
+	 *  If the connection is closed, this will resolve instantly. If the
+	 *  connection closes without another message, this will resolve
+	 *  with `undefined`.
+	 */
+	awaitMessage() {
+		if (this.isConnectionClosed()) return;
+
+		return new Promise<MessageEvent | undefined>((res) => {
+			this.awaitMessageCallbacks.push(res);
+		});
+	}
+}
+
+class RoomCollabState {
+	userUuid = $state<string>();
+	get user() {
+		return this.users.find((u) => u.uuid === this.userUuid);
+	}
+	get accessLevel() {
+		return this.user?.access_level ?? "view";
+	}
+	users = $state<Array<User>>([]);
+
+	constructor(userUuid: string, users: Array<User>) {
+		this.userUuid = userUuid;
+		this.users = users;
+	}
+
+	userJoined(user: User) {
+		this.users.push(user);
+	}
+	userChanged(user: User) {
+		this.users = this.users.map((u) => (u.uuid === user.uuid ? user : u));
+	}
+	userDisconnected(userUuid: string) {
+		this.users = this.users.filter((u) => u.uuid !== userUuid);
 	}
 }

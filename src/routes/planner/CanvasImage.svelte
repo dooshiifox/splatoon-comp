@@ -21,7 +21,7 @@
 	let index = 0;
 	$effect(() => {
 		// eslint-disable-next-line @typescript-eslint/no-unused-expressions
-		thisEl.url;
+		thisEl.ty.url;
 		startedLoadingAt = Date.now();
 		index--;
 	});
@@ -30,22 +30,22 @@
 <div
 	class="contain-[size_layout] absolute {isSelected
 		? 'ring-[length:2px/var(--editor-zoom)] ring-blue-500'
-		: thisEl.selectable
+		: editor.isElementSelectable(thisEl)
 			? 'ring-blue-500 hover:ring-[length:2px/var(--editor-zoom)]'
 			: ''}"
-	style:top="{thisEl.centerY}px"
-	style:left="{thisEl.centerX}px"
+	style:top="{thisEl.y}px"
+	style:left="{thisEl.x}px"
 	style:--editor-zoom={editor.zoom.animated * editor.getScale(id)}
-	style:z-index={thisEl.zIndex}
+	style:z-index={thisEl.z_index}
 	style:transform={editor.calculateElementTransform(id)}
 	style:width="{imgWidth}px"
 	style:height="{imgHeight}px"
 	data-id={id}
 >
-	{#key thisEl.url}
+	{#key thisEl.ty.url}
 		<img
 			alt=""
-			src={thisEl.url}
+			src={thisEl.ty.url}
 			draggable="false"
 			class="absolute inset-0 bg-cover object-cover transition-opacity {shouldFade
 				? 'duration-200'

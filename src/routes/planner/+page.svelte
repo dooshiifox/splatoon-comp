@@ -64,6 +64,7 @@
 	const plannerContext = createContext<{
 		readonly editor: TEditor | undefined;
 		readonly map: ReturnType<typeof getCurrentSelected>;
+		readonly roomCollab: RoomCollab;
 	}>("planner");
 	export const getPlannerContext = plannerContext.get;
 
@@ -127,7 +128,7 @@
 		type Location,
 		locationCommandPalette
 	} from "./locations";
-	import type { Editor as TEditor } from "./editor.svelte";
+	import { RoomCollab, type Editor as TEditor } from "./editor.svelte";
 	import { untrack } from "svelte";
 	import { SvelteSet } from "svelte/reactivity";
 	import { applyBehaviors } from "$lib/headlessui/internal/behavior.svelte";
@@ -136,11 +137,12 @@
 	import { strAfter, strStartsWith } from "$lib";
 	import { unreachable } from "albtc";
 	import { queryParameters } from "sveltekit-search-params";
-	import A from "$lib/mdsvex/a.svelte";
 	import PageTabs from "./PageTabs.svelte";
 	import { createContext } from "$lib/context";
+	import { Color } from "$lib/color.svelte";
 
 	let editor = $state<TEditor>();
+	let roomCollab = new RoomCollab();
 	let backgroundId: string;
 	const current = getCurrentSelected();
 	let image = $derived(getStageImage(current.mapInfo.id, current.mode, current.isMinimap));
@@ -150,6 +152,9 @@
 		},
 		get map() {
 			return current;
+		},
+		get roomCollab() {
+			return roomCollab;
 		}
 	});
 
@@ -158,8 +163,12 @@
 		image;
 		untrack(() => {
 			if (editor === undefined) return;
+			const img = editor.getElement(backgroundId, "image");
 			editor.updateElement(backgroundId, {
-				url: image
+				ty: {
+					...img.ty,
+					url: image
+				}
 			});
 		});
 	});
@@ -172,15 +181,15 @@
 		const scale = transform.scale;
 		const translateX = transform.translate.x;
 		const translateY = transform.translate.y;
-		const x = reverse ? el.centerX / scale - translateX : el.centerX;
-		const y = reverse ? el.centerY / scale - translateY : el.centerY;
+		const x = reverse ? el.x / scale - translateX : el.x;
+		const y = reverse ? el.y / scale - translateY : el.y;
 		// calc translation when rotated around center
 		const newX = x * Math.cos(rotationCenter) - y * Math.sin(rotationCenter);
 		const newY = y * Math.cos(rotationCenter) + x * Math.sin(rotationCenter);
 
 		editor?.updateElement(id, {
-			centerX: reverse ? newX : (newX + translateX) * scale,
-			centerY: reverse ? newY : (newY + translateY) * scale
+			x: reverse ? newX : (newX + translateX) * scale,
+			y: reverse ? newY : (newY + translateY) * scale
 		});
 	}
 
@@ -192,15 +201,23 @@
 			for (const location of current.modeLocations) {
 				if (location.type === "callout") {
 					editor?.addElement({
-						centerX: location.x,
-						centerY: location.y,
-						type: "text",
-						color: "#dddb6b",
-						content: location.content,
-						font: "splatoon-text",
-						groups: new SvelteSet(["items", mapCombo, "callout"]),
-						selectable: false,
-						zIndex: 100
+						x: location.x,
+						y: location.y,
+						ty: {
+							type: "text",
+							color: Color.fromRgb("#dddb6b")!,
+							content: location.content,
+							font: {
+								font_type: "sans",
+								custom_font_family: "splatoon-text"
+							},
+							align: "center",
+							size: 30,
+							background_color: Color.fromRgb("#0000")!,
+							background_blur: 0
+						},
+						groups: new SvelteSet(["items", mapCombo, "callout", "locked"]),
+						z_index: 100
 					});
 				}
 			}
@@ -209,7 +226,7 @@
 		return () =>
 			untrack(() => {
 				for (const el of editor?.getElementsInGroup(mapCombo) ?? []) {
-					editor?.deleteElement(el.id);
+					editor?.deleteElement(el.uuid);
 				}
 			});
 	});
@@ -224,7 +241,7 @@
 
 		untrack(() => {
 			for (const el of editor?.getElementsInGroup("items") ?? []) {
-				transformElement(el.id, transform, false);
+				transformElement(el.uuid, transform, false);
 				el.groups.add("transform-" + mapCombo);
 			}
 		});
@@ -233,7 +250,7 @@
 		return () =>
 			untrack(() => {
 				for (const el of editor?.getElementsInGroup("transform-" + mapCombo) ?? []) {
-					transformElement(el.id, transform, true);
+					transformElement(el.uuid, transform, true);
 				}
 			});
 	});
@@ -305,13 +322,23 @@
 		onCreate={(etor) => {
 			editor = etor;
 			backgroundId = editor.addElement({
-				type: "image",
-				centerX: 0,
-				centerY: 0,
-				url: image,
-				selectable: false,
-				zIndex: -100,
-				scale: "none"
+				ty: {
+					type: "image",
+					alt: "",
+					crop: { top: 0, bottom: 0, left: 0, right: 0 },
+					outline_blur: 0,
+					outline_color: Color.fromRgb("#0000")!,
+					outline_thickness: 0,
+					scale_x: 1,
+					scale_y: 1,
+					text: [],
+					url: image
+				},
+				x: 0,
+				y: 0,
+				z_index: -100,
+				scale_rate: "none",
+				groups: new SvelteSet(["locked"])
 			});
 		}}
 	/>

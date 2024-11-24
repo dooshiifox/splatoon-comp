@@ -36,16 +36,33 @@ pub struct Element {
     /// on a layer invisible.
     groups: HashSet<String>,
 }
+impl Element {
+    pub fn new(el: ElementType) -> Self {
+        Element {
+            uuid: Uuid::new_v4(),
+            ty: el,
+            last_edited_by: Uuid::new_v4(),
+            selected_by: vec![],
+            x: 0.,
+            y: 0.,
+            anchor: ElementAnchor::default(),
+            rotation: 0.,
+            scale_rate: ScaleRate::default(),
+            z_index: 0.,
+            groups: HashSet::default(),
+        }
+    }
+}
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-#[serde(rename_all = "snake_case")]
-enum ElementType {
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ElementType {
     Text(ElementText),
     Image(ElementImage),
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-struct ElementText {
+pub struct ElementText {
     content: String,
     align: TextAlignment,
     color: Color,
@@ -54,39 +71,68 @@ struct ElementText {
     background_color: Color,
     background_blur: f64,
 }
-#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
+impl ElementText {
+    pub fn new(content: String) -> ElementText {
+        ElementText {
+            content,
+            align: TextAlignment::default(),
+            color: Color::get_random_color(),
+            size: 30.,
+            font: TextFont::default(),
+            background_color: Color::new("#00000000").unwrap(),
+            background_blur: 0.,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq, Default)]
 #[serde(rename_all = "snake_case")]
-enum TextAlignment {
+pub enum TextAlignment {
     Left,
+    #[default]
     Center,
     Right,
     Justify,
 }
 #[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
-#[serde(rename_all = "snake_case")]
-enum TextFont {
-    /// The default sans-serif font for the canvas.
-    Sans,
-    /// The default serif font for the canvas.
-    Serif,
-    /// The default monospace font for the canvas.
-    Mono,
-    /// A sans-serif font using a custom font.
-    /// If the user doesn't have it installed, fallsback to the
-    /// default sans-serif font for the canvas.
-    CustomSans(String),
-    /// A serif font using a custom font.
-    /// If the user doesn't have it installed, fallsback to the
-    /// default serif font for the canvas.
-    CustomSerif(String),
-    /// A monospace font using a custom font.
-    /// If the user doesn't have it installed, fallsback to the
-    /// default monospace font for the canvas.
-    CustomMono(String),
+#[serde(
+    tag = "font_type",
+    content = "custom_font_family",
+    rename_all = "snake_case"
+)]
+pub enum TextFont {
+    /// A sans-serif font.
+    /// If a value is given, that font will be used. If a value is not given,
+    /// the default sans-serif font for the canvas is used. If the user doesn't
+    /// have the custom font installed, fallsback to the default
+    /// sans-serif font for the canvas.
+    Sans(Option<String>),
+    /// A serif font.
+    /// If a value is given, that font will be used. If a value is not given,
+    /// the default serif font for the canvas is used. If the user doesn't
+    /// have the custom font installed, fallsback to the default
+    /// serif font for the canvas.
+    Serif(Option<String>),
+    /// A monospace font.
+    /// If a value is given, that font will be used. If a value is not given,
+    /// the default monospace font for the canvas is used. If the user doesn't
+    /// have the custom font installed, fallsback to the default
+    /// monospace font for the canvas.
+    Mono(Option<String>),
+}
+impl TextFont {
+    const SANS_DEFAULT: TextFont = TextFont::Sans(None);
+    const SERIF_DEFAULT: TextFont = TextFont::Serif(None);
+    const MONO_DEFAULT: TextFont = TextFont::Mono(None);
+}
+impl Default for TextFont {
+    fn default() -> Self {
+        Self::SANS_DEFAULT
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-struct ElementImage {
+pub struct ElementImage {
     url: String,
     /// Accessibility alt text for the image.
     alt: String,
@@ -101,8 +147,8 @@ struct ElementImage {
     outline_blur: f64,
     text: Vec<ImageText>,
 }
-#[derive(Serialize, Deserialize, Clone, Debug)]
-struct ImageCrop {
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct ImageCrop {
     /// Percentage from the left to crop off.
     left: f64,
     /// Percentage from the top to crop off.
@@ -113,7 +159,7 @@ struct ImageCrop {
     bottom: f64,
 }
 #[derive(Serialize, Deserialize, Clone, Debug)]
-struct ImageText {
+pub struct ImageText {
     /// The X position of this element, as a percentage relative to the
     /// image it is placed on.
     x: f64,
@@ -127,7 +173,7 @@ struct ImageText {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-struct ElementAnchor {
+pub struct ElementAnchor {
     /// Position from the top, as a float of 0-1 representing a percentage.
     top: f64,
     /// Position from the left, as a float of 0-1 representing a percentage.
@@ -149,11 +195,17 @@ impl ElementAnchor {
         ElementAnchor { top: 0., left: 0. }
     }
 }
+impl Default for ElementAnchor {
+    fn default() -> ElementAnchor {
+        ElementAnchor::centered()
+    }
+}
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 #[serde(rename_all = "snake_case")]
-enum ScaleRate {
+pub enum ScaleRate {
     /// Causes elements to scale at the same rate as the background.
+    #[default]
     None,
     /// The default implementation of the scale rate.
     /// Causes elements to scale at a rate of `bg_scale ** -0.5`,

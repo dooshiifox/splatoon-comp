@@ -1,6 +1,5 @@
 <script lang="ts" module>
-	import { tryString, unreachable } from "albtc";
-	import * as v from "valibot";
+	import { tryString } from "albtc";
 
 	const COLORS = [
 		"#ef4444",
@@ -15,261 +14,6 @@
 	function getRandomColor() {
 		return COLORS[Math.floor(Math.random() * COLORS.length)];
 	}
-	const PROTOCOL = 1;
-
-	type CallbackCollection<T> = Array<(arg: T) => unknown>;
-	class RoomCollab {
-		state = $state<"connecting" | "open" | "closing" | "closed">("closed");
-
-		conn: WebSocket | undefined;
-
-		private awaitOpenCallbacks: CallbackCollection<Event> = [];
-		private awaitCloseCallbacks: CallbackCollection<CloseEvent> = [];
-		private awaitErrorCallbacks: CallbackCollection<Event | undefined> = [];
-		private awaitMessageCallbacks: CallbackCollection<MessageEvent | undefined> = [];
-
-		async connect(url: string, room: string, username: string, color?: string, password?: string) {
-			if (this.isConnectionOpen()) {
-				await this.disconnect();
-			}
-
-			let p: Record<string, string> = {
-				protocol: PROTOCOL.toString(),
-				room,
-				username
-			};
-			if (color) {
-				p.color = color;
-			}
-			if (password) {
-				p.password = password;
-			}
-
-			try {
-				this.conn = new WebSocket(`${url}?${new URLSearchParams(p).toString()}`);
-			} catch (e) {
-				console.error("Failed to connect to server", e);
-				throw new Error("Failed to connect to server.");
-			}
-
-			this.state = "connecting";
-			this.conn.addEventListener("open", (e) => {
-				// Call all open event listeners
-				this.state = "open";
-				this.awaitOpenCallbacks.forEach((cb) => cb(e));
-				this.awaitOpenCallbacks = [];
-			});
-			this.conn.addEventListener("close", (e) => {
-				// Call all close event listeners
-				this.state = "closed";
-				this.conn = undefined;
-				this.awaitCloseCallbacks.forEach((cb) => cb(e));
-				this.awaitCloseCallbacks = [];
-				this.awaitErrorCallbacks.forEach((cb) => cb(undefined));
-				this.awaitErrorCallbacks = [];
-				this.awaitMessageCallbacks.forEach((cb) => cb(undefined));
-				this.awaitMessageCallbacks = [];
-			});
-			this.conn.addEventListener("error", (e) => {
-				// Call all error event listeners
-				this.awaitErrorCallbacks.forEach((cb) => cb(e));
-				this.awaitErrorCallbacks = [];
-			});
-			this.conn.addEventListener("message", (e) => {
-				// Call all message event listeners
-				this.awaitMessageCallbacks.forEach((cb) => cb(e));
-				this.awaitMessageCallbacks = [];
-			});
-
-			// Wait for either an error, a close, or a first message
-			const event = await Promise.any([this.awaitError(), this.awaitClose(), this.awaitMessage()]);
-			if (event === undefined) {
-				// `awaitError` and `awaitMessage` can return undefined, only if
-				// the socket is closed, but if the socket is closed then
-				// `awaitClose` will return first and return an event.
-				// If we get undefined, our reasoning has gone wrong somewhere.
-				throw new Error("Something went horribly wrong?");
-			}
-
-			// If it was an error we received, tell the user
-			if (event.type === "error") {
-				console.error("Failed to connect to server: Error", event);
-				throw new Error("Failed to connect to server.");
-			} else if (event.type === "close") {
-				// Try parse what type of error it was and give feedback to
-				// the user.
-				console.log("An issue occured connecting to server: Close", event);
-				let reason;
-				try {
-					reason = JSON.parse((event as CloseEvent).reason);
-				} catch {
-					console.warn("^^^ JSON parsing error.");
-					throw new Error("Failed to connect to server.");
-				}
-
-				const validate = v.variant("type", [
-					v.object({
-						type: v.picklist([
-							"room_missing",
-							"username_missing",
-							"color_invalid",
-							"password_required",
-							"password_incorrect"
-						])
-					}),
-					v.object({
-						type: v.literal("protocol_error"),
-						server: v.pipe(v.number(), v.minValue(0))
-					}),
-					v.object({
-						type: v.literal("room_invalid_length"),
-						min_len: v.pipe(v.number(), v.minValue(0)),
-						max_len: v.pipe(v.number(), v.minValue(0)),
-						specified_len: v.pipe(v.number(), v.minValue(0))
-					}),
-					v.object({
-						type: v.literal("username_invalid_length"),
-						min_len: v.pipe(v.number(), v.minValue(0)),
-						max_len: v.pipe(v.number(), v.minValue(0)),
-						specified_len: v.pipe(v.number(), v.minValue(0))
-					})
-				]);
-				const close = v.safeParse(validate, reason);
-				if (!close.success) {
-					console.warn("^^^ Validation error.");
-					throw new Error("Failed to connect to server.");
-				}
-				const r = close.output;
-
-				if (r.type === "protocol_error") {
-					// check our protocol vs the server's
-					if (r.server > PROTOCOL) {
-						throw new Error(
-							"The server is using a newer communication protocol. Try refresh the webpage."
-						);
-					} else {
-						throw new Error(
-							"The server is using an outdated communication protocol. Try again shortly, or bug the server admin to update it."
-						);
-					}
-				} else if (r.type === "room_missing") {
-					throw new Error("Please specify the name of the room to create or join!");
-				} else if (r.type === "room_invalid_length") {
-					if (r.min_len > r.specified_len) {
-						throw new Error(
-							`That room name is too short! Yours is ${r.specified_len} characters, but the minimum is ${r.min_len} characters.`
-						);
-					} else {
-						throw new Error(
-							`That room name is too long! Yours is ${r.specified_len} characters, but the maximum is ${r.max_len} characters.`
-						);
-					}
-				} else if (r.type === "username_missing") {
-					throw new Error("Please enter a username to join with!");
-				} else if (r.type === "username_invalid_length") {
-					if (r.min_len > r.specified_len) {
-						throw new Error(
-							`That username is too short! Yours is ${r.specified_len} characters, but the minimum is ${r.min_len} characters.`
-						);
-					} else {
-						throw new Error(
-							`That username is too long! Yours is ${r.specified_len} characters, but the maximum is ${r.max_len} characters.`
-						);
-					}
-				} else if (r.type === "color_invalid") {
-					throw new Error("That color doesn't seem valid. Please choose another!");
-				} else if (r.type === "password_required") {
-					throw new Error("A password is required to join this room.");
-				} else if (r.type === "password_incorrect") {
-					throw new Error("Sorry, that password isn't correct! Please try again.");
-				} else {
-					unreachable(r.type);
-				}
-			} else if (event.type === "message") {
-				// Yippee! it worked! now do nothing.
-			}
-		}
-
-		isConnectionConnecting(): boolean {
-			return this.conn !== undefined && this.conn.readyState === this.conn.CONNECTING;
-		}
-		isConnectionOpen(): boolean {
-			return this.conn !== undefined && this.conn.readyState === this.conn.OPEN;
-		}
-		isConnectionClosed(): boolean {
-			return this.conn === undefined || this.conn.readyState === this.conn.CLOSED;
-		}
-
-		/** Disconnects from the current client.
-		 *
-		 *  Resolves after disconnect.
-		 */
-		async disconnect() {
-			// Already disconnected
-			if (this.isConnectionClosed()) return;
-
-			const onClose = this.awaitClose();
-			// Need to close the connection if not already closing
-			// Regardless, we need to await the promise.
-			if (this.conn !== undefined && this.conn.readyState !== this.conn.CLOSING) {
-				this.conn!.close();
-				this.state = "closing";
-			}
-
-			await onClose;
-			// close event listener handles setting all the state
-		}
-
-		/** Awaits for the connection to become open from the connecting state.
-		 *
-		 *  If the connection is already open, closing, or closed, this will
-		 *  resolve instantly.
-		 */
-		awaitOpen() {
-			if (!this.isConnectionConnecting()) return;
-
-			return new Promise<Event>((res) => {
-				this.awaitOpenCallbacks.push(res);
-			});
-		}
-		/** Awaits for the connection to close.
-		 *
-		 *  If the connection is already closed, this will resolve instantly.
-		 */
-		awaitClose() {
-			if (this.isConnectionClosed()) return;
-
-			return new Promise<CloseEvent>((res) => {
-				this.awaitCloseCallbacks.push(res);
-			});
-		}
-		/** Awaits for the connection to experience an error.
-		 *
-		 *  If the connection is closed, this will resolve instantly. If the
-		 *  connection closes without an error occurring, this will resolve
-		 *  with `undefined`.
-		 */
-		awaitError() {
-			if (this.isConnectionClosed()) return;
-
-			return new Promise<Event | undefined>((res) => {
-				this.awaitErrorCallbacks.push(res);
-			});
-		}
-		/** Awaits for the connection to receive a message.
-		 *
-		 *  If the connection is closed, this will resolve instantly. If the
-		 *  connection closes without another message, this will resolve
-		 *  with `undefined`.
-		 */
-		awaitMessage() {
-			if (this.isConnectionClosed()) return;
-
-			return new Promise<MessageEvent | undefined>((res) => {
-				this.awaitMessageCallbacks.push(res);
-			});
-		}
-	}
 </script>
 
 <script lang="ts">
@@ -277,6 +21,8 @@
 	import ColorPicker from "$lib/ColorPicker.svelte";
 	import { Color } from "$lib/color.svelte";
 	import { fade, slide } from "svelte/transition";
+	import { getPlannerContext } from "./+page.svelte";
+	import { getHighestContrast } from "$lib/apca";
 
 	let username = $state(localStorage.getItem("previous-username") ?? "");
 	let roomName = $state(localStorage.getItem("previous-room") ?? "");
@@ -285,8 +31,8 @@
 			Color.fromRgb(getRandomColor())!
 	);
 	let password = $state("");
+	let ctx = getPlannerContext();
 
-	let conn = new RoomCollab();
 	let connectionError = $state();
 	function connect() {
 		connectionError = undefined;
@@ -304,13 +50,13 @@
 			[url, room] = roomName.split("#");
 		}
 
-		conn.connect(url, room, username, color.rgb, password).catch((e) => {
+		ctx.roomCollab.connect(url, room, username, color.rgb, password).catch((e) => {
 			connectionError = tryString(e);
 		});
 	}
 </script>
 
-{#if conn.state === "connecting" || conn.state === "closed"}
+{#if !ctx.roomCollab.state}
 	<div class="relative p-2">
 		<Input
 			type="text"
@@ -356,7 +102,7 @@
 			<p class="px-4 pt-2 text-red-200" transition:slide>{connectionError}</p>
 		{/if}
 
-		{#if conn.state === "connecting"}
+		{#if ctx.roomCollab.connectionState === "connecting"}
 			<div class="absolute inset-0 bg-white/50 md:rounded-b-xl" transition:fade={{ duration: 200 }}>
 				<svg
 					class="h-5 w-5 animate-spin text-white"
@@ -390,4 +136,106 @@ Session
   - Save
   - Disconnect
 -->
+	<div class="relative p-2">
+		<div class="flex flex-row items-center justify-center gap-3 font-bold text-gray-300">
+			<svg
+				xmlns="http://www.w3.org/2000/svg"
+				viewBox="0 0 16 16"
+				fill="currentColor"
+				class="size-4"
+			>
+				<path
+					d="M8 8a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM3.156 11.763c.16-.629.44-1.21.813-1.72a2.5 2.5 0 0 0-2.725 1.377c-.136.287.102.58.418.58h1.449c.01-.077.025-.156.045-.237ZM12.847 11.763c.02.08.036.16.046.237h1.446c.316 0 .554-.293.417-.579a2.5 2.5 0 0 0-2.722-1.378c.374.51.653 1.09.813 1.72ZM14 7.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0ZM3.5 9a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3ZM5 13c-.552 0-1.013-.455-.876-.99a4.002 4.002 0 0 1 7.753 0c.136.535-.324.99-.877.99H5Z"
+				/>
+			</svg>
+
+			<p class="text-center">
+				{roomName}
+			</p>
+		</div>
+
+		<ul class="-mr-1 ml-2 mt-4 space-y-2">
+			{#each ctx.roomCollab.state.users as user (user.uuid)}
+				<li class="flex flex-row items-center gap-4 overflow-visible">
+					<div
+						class="grid size-7 place-items-center rounded-full text-base font-bold"
+						style:color={getHighestContrast(
+							["#ffffff", "#000000"],
+							user.color.rgbOnBackground("#1e293b")
+						)}
+						style:background={user.color.rgb}
+					>
+						<span>{user.username[0]}</span>
+					</div>
+
+					<span class="flex-1 truncate text-lg font-bold text-gray-100">{user.username}</span>
+
+					<div class="flex flex-row items-center gap-2 text-gray-300">
+						{#if user.access_level === "view"}
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								viewBox="0 0 16 16"
+								fill="currentColor"
+								class="size-4"
+							>
+								<path d="M8 9.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z" />
+								<path
+									fill-rule="evenodd"
+									d="M1.38 8.28a.87.87 0 0 1 0-.566 7.003 7.003 0 0 1 13.238.006.87.87 0 0 1 0 .566A7.003 7.003 0 0 1 1.379 8.28ZM11 8a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"
+									clip-rule="evenodd"
+								/>
+							</svg>
+						{:else if user.access_level === "edit"}
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								viewBox="0 0 16 16"
+								fill="currentColor"
+								class="size-4"
+							>
+								<path
+									d="M13.488 2.513a1.75 1.75 0 0 0-2.475 0L6.75 6.774a2.75 2.75 0 0 0-.596.892l-.848 2.047a.75.75 0 0 0 .98.98l2.047-.848a2.75 2.75 0 0 0 .892-.596l4.261-4.262a1.75 1.75 0 0 0 0-2.474Z"
+								/>
+								<path
+									d="M4.75 3.5c-.69 0-1.25.56-1.25 1.25v6.5c0 .69.56 1.25 1.25 1.25h6.5c.69 0 1.25-.56 1.25-1.25V9A.75.75 0 0 1 14 9v2.25A2.75 2.75 0 0 1 11.25 14h-6.5A2.75 2.75 0 0 1 2 11.25v-6.5A2.75 2.75 0 0 1 4.75 2H7a.75.75 0 0 1 0 1.5H4.75Z"
+								/>
+							</svg>
+						{:else}
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								viewBox="0 0 16 16"
+								fill="currentColor"
+								class="size-4"
+							>
+								<path
+									fill-rule="evenodd"
+									d="M11.5 8a3.5 3.5 0 0 0 3.362-4.476c-.094-.325-.497-.39-.736-.15L12.099 5.4a.48.48 0 0 1-.653.033 8.554 8.554 0 0 1-.879-.879.48.48 0 0 1 .033-.653l2.027-2.028c.24-.239.175-.642-.15-.736a3.502 3.502 0 0 0-4.476 3.427c.018.99-.133 2.093-.914 2.7l-5.31 4.13a2.015 2.015 0 1 0 2.828 2.827l4.13-5.309c.607-.78 1.71-.932 2.7-.914L11.5 8ZM3 13.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Z"
+									clip-rule="evenodd"
+								/>
+							</svg>
+						{/if}
+
+						<span class="text-sm font-bold capitalize">{user.access_level}</span>
+					</div>
+
+					{#if ctx.roomCollab.state.accessLevel === "admin" && user.uuid !== ctx.roomCollab.state.userUuid}
+						<button class="-ml-2 rounded p-0.5 text-gray-300 hover:bg-gray-600">
+							<span class="sr-only">Edit user</span>
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								viewBox="0 0 20 20"
+								fill="currentColor"
+								class="size-5"
+							>
+								<path
+									d="M10 3a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3ZM10 8.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3ZM11.5 15.5a1.5 1.5 0 1 0-3 0 1.5 1.5 0 0 0 3 0Z"
+								/>
+							</svg>
+						</button>
+					{:else}
+						<div class="-ml-2 w-2"></div>
+					{/if}
+				</li>
+			{/each}
+		</ul>
+	</div>
 {/if}

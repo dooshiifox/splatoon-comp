@@ -29,7 +29,7 @@
 			mono: "font-mono",
 			"splatoon-block": "font-splatoon-block",
 			"splatoon-text": "font-splatoon-text"
-		}[thisEl.font]
+		}[thisEl.ty.font.custom_font_family ?? thisEl.ty.font.font_type]
 	);
 	function onKeyDown(e: KeyboardEvent) {
 		if (e.key === "Escape") {
@@ -40,7 +40,7 @@
 		if (el === undefined) return;
 
 		if (el.value !== "") {
-			editor.updateElement(id, { content: el.value });
+			editor.updateElement(id, { ty: { ...thisEl.ty, content: el.value } });
 			editor.deselectElement(id);
 		} else {
 			editor.deleteElement(id);
@@ -51,20 +51,20 @@
 	let isEditable = $derived(editor.isOnlyElementSelected(id));
 
 	// svelte-ignore state_referenced_locally
-	let value = $state(thisEl.content);
-	let textShadow = $derived(getHighestContrast(thisEl.color, ["#ffffff", "#000000"]));
+	let value = $state(thisEl.ty.content);
+	let textShadow = $derived(getHighestContrast(thisEl.ty.color.rgb, ["#ffffff", "#000000"]));
 </script>
 
 <div
 	class="contain-[size_layout] absolute {isSelected
 		? 'ring-[length:2px/var(--editor-zoom)] ring-blue-500'
-		: thisEl.selectable
+		: editor.isElementSelectable(thisEl)
 			? 'ring-blue-500 hover:ring-[length:2px/var(--editor-zoom)]'
 			: ''}"
-	style:top="{thisEl.centerY}px"
-	style:left="{thisEl.centerX}px"
+	style:top="{thisEl.y}px"
+	style:left="{thisEl.x}px"
 	style:--editor-zoom={editor.zoom.animated * editor.getScale(id)}
-	style:z-index={thisEl.zIndex}
+	style:z-index={thisEl.z_index}
 	style:transform={editor.calculateElementTransform(id)}
 	style:width="{width + 8}px"
 	style:height="{height + 8}px"
@@ -74,7 +74,7 @@
 		bind:this={el}
 		class="text-shadow size-full resize-none overflow-hidden border-0 bg-transparent p-0 pl-0.5 pt-0.5 text-center align-top text-2xl outline-none !ring-0 {fontFamily}"
 		class:pointer-events-none={!isEditable}
-		style:color={thisEl.color}
+		style:color={thisEl.ty.color.rgb}
 		style:--text-shadow={textShadow}
 		onkeydown={onKeyDown}
 		onblur={onBlur}

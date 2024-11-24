@@ -72,11 +72,11 @@
 			.offsetY.animated}px)"
 		style:--cursor={editor.cursor}
 	>
-		{#each Object.values(editor.elements) as element (element.id)}
-			{#if element.type === "text"}
-				<CanvasText id={element.id} />
-			{:else if element.type === "image"}
-				<CanvasImage id={element.id} />
+		{#each Object.values(editor.elements) as element (element.uuid)}
+			{#if element.ty.type === "text"}
+				<CanvasText id={element.uuid} />
+			{:else if element.ty.type === "image"}
+				<CanvasImage id={element.uuid} />
 			{/if}
 		{/each}
 	</div>

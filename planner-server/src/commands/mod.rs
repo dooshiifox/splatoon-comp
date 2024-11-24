@@ -37,7 +37,7 @@ pub enum AnnounceType {
     Join(join::Announce),
     OnJoin(join::Respond),
     Disconnect(disconnect::Announce),
-    UserChange(User),
+    UserChange { user: User },
 }
 impl AnnounceType {
     pub fn into_announce_with_id(self, id: Uuid) -> Announce {

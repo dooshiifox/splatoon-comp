@@ -2,6 +2,7 @@
 	import { createMenu, Transition } from "$lib/headlessui";
 	import { SvelteSet } from "svelte/reactivity";
 	import { getEditorContext } from "./Canvas.svelte";
+	import { Color } from "$lib/color.svelte";
 
 	const editor = getEditorContext();
 
@@ -10,12 +11,21 @@
 		onselect(value) {
 			if (value[0] === "add-text") {
 				editor.addElement({
-					type: "text",
-					centerX: editor.toCanvasSpaceX(position.x),
-					centerY: editor.toCanvasSpaceY(position.y),
-					content: "",
-					color: "#ffffff",
-					font: "splatoon-text",
+					ty: {
+						type: "text",
+						content: "",
+						color: Color.fromRgb("#ffffff")!,
+						font: {
+							font_type: "sans",
+							custom_font_family: "splatoon-text"
+						},
+						align: "center",
+						size: 30,
+						background_blur: 0,
+						background_color: Color.fromRgb("#00000000")!
+					},
+					x: editor.toCanvasSpaceX(position.x),
+					y: editor.toCanvasSpaceY(position.y),
 					groups: new SvelteSet(["items"])
 				});
 			}

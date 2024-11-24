@@ -1,3 +1,4 @@
+use element::{Element, ElementText, ElementType};
 use futures_channel::mpsc::UnboundedSender;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, net::SocketAddr};
@@ -221,7 +222,7 @@ impl Room {
         let found_user = found_user.unwrap();
         found_user.access_level = access_level;
         let found_user = found_user.clone().into();
-        self.announce_all(commands::AnnounceType::UserChange(found_user));
+        self.announce_all(commands::AnnounceType::UserChange { user: found_user });
 
         // If we're promoting someone to admin, make sure we don't end up with
         // 2 admins!
@@ -234,7 +235,7 @@ impl Room {
             // Demote the old admin to edit access
             admin.access_level = AccessLevel::Edit;
             let admin = admin.clone().into();
-            self.announce_all(commands::AnnounceType::UserChange(admin));
+            self.announce_all(commands::AnnounceType::UserChange { user: admin });
         }
     }
 
@@ -274,9 +275,18 @@ impl RoomUser {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Default)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct RoomCanvas {
     elements: Vec<element::Element>,
+}
+impl Default for RoomCanvas {
+    fn default() -> Self {
+        Self {
+            elements: vec![Element::new(ElementType::Text(ElementText::new(
+                "Hello, world".to_string(),
+            )))],
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Default, Debug)]
