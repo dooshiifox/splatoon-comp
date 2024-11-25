@@ -26,7 +26,7 @@
 					},
 					x: editor.toCanvasSpaceX(position.x),
 					y: editor.toCanvasSpaceY(position.y),
-					groups: new SvelteSet(["items"])
+					tags: new SvelteSet(["items"])
 				});
 			}
 		}

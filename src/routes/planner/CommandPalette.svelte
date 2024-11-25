@@ -6,7 +6,7 @@
 		readonly alias: ReadonlyArray<string>;
 	};
 
-	type Props<T> = {
+	type Props<T extends string> = {
 		open: boolean;
 		readonly actions: ReadonlyArray<CommandEntry<T>>;
 		readonly onSelect: (action: T) => void;

@@ -64,7 +64,6 @@
 	const plannerContext = createContext<{
 		readonly editor: TEditor | undefined;
 		readonly map: ReturnType<typeof getCurrentSelected>;
-		readonly roomCollab: RoomCollab;
 	}>("planner");
 	export const getPlannerContext = plannerContext.get;
 
@@ -128,7 +127,7 @@
 		type Location,
 		locationCommandPalette
 	} from "./locations";
-	import { RoomCollab, type Editor as TEditor } from "./editor.svelte";
+	import { LOCKED_TAG, NO_SYNC_TAG, type Editor as TEditor } from "./editor.svelte";
 	import { untrack } from "svelte";
 	import { SvelteSet } from "svelte/reactivity";
 	import { applyBehaviors } from "$lib/headlessui/internal/behavior.svelte";
@@ -140,9 +139,9 @@
 	import PageTabs from "./PageTabs.svelte";
 	import { createContext } from "$lib/context";
 	import { Color } from "$lib/color.svelte";
+	import { uuid } from "$lib/uuid";
 
 	let editor = $state<TEditor>();
-	let roomCollab = new RoomCollab();
 	let backgroundId: string;
 	const current = getCurrentSelected();
 	let image = $derived(getStageImage(current.mapInfo.id, current.mode, current.isMinimap));
@@ -152,9 +151,6 @@
 		},
 		get map() {
 			return current;
-		},
-		get roomCollab() {
-			return roomCollab;
 		}
 	});
 
@@ -195,7 +191,7 @@
 
 	$effect(() => {
 		if (!editor) return;
-		const mapCombo = current.map + current.mode + untrack(() => editor?.genId());
+		const mapCombo = current.map + current.mode + untrack(() => uuid());
 
 		untrack(() => {
 			for (const location of current.modeLocations) {
@@ -216,7 +212,7 @@
 							background_color: Color.fromRgb("#0000")!,
 							background_blur: 0
 						},
-						groups: new SvelteSet(["items", mapCombo, "callout", "locked"]),
+						tags: new SvelteSet(["items", mapCombo, "callout", LOCKED_TAG, NO_SYNC_TAG]),
 						z_index: 100
 					});
 				}
@@ -237,12 +233,12 @@
 			current.isMinimap && current.mapInfo.minimap
 				? current.mapInfo.minimap
 				: { rotation: 0, scale: 1, translate: { x: 0, y: 0 } };
-		const mapCombo = current.map + current.mode + untrack(() => editor?.genId());
+		const mapCombo = current.map + current.mode + untrack(() => uuid());
 
 		untrack(() => {
 			for (const el of editor?.getElementsInGroup("items") ?? []) {
 				transformElement(el.uuid, transform, false);
-				el.groups.add("transform-" + mapCombo);
+				el.tags.add("transform-" + mapCombo);
 			}
 		});
 
@@ -338,7 +334,7 @@
 				y: 0,
 				z_index: -100,
 				scale_rate: "none",
-				groups: new SvelteSet(["locked"])
+				tags: new SvelteSet([LOCKED_TAG, NO_SYNC_TAG])
 			});
 		}}
 	/>

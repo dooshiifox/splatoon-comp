@@ -35,6 +35,8 @@
 
 	let connectionError = $state();
 	function connect() {
+		if (ctx.editor === undefined) return;
+
 		connectionError = undefined;
 		localStorage.setItem("previous-username", username);
 		localStorage.setItem("previous-room", roomName);
@@ -50,13 +52,17 @@
 			[url, room] = roomName.split("#");
 		}
 
-		ctx.roomCollab.connect(url, room, username, color.rgb, password).catch((e) => {
+		ctx.editor.room.connect(url, room, username, color.rgb, password).catch((e) => {
 			connectionError = tryString(e);
 		});
 	}
 </script>
 
-{#if !ctx.roomCollab.state}
+{#if ctx.editor === undefined}
+	<div class="relative p-2">
+		<p class="text-center text-slate-200">Waiting for editor to load...</p>
+	</div>
+{:else if ctx.editor.room.connectionState === "closed" || ctx.editor.room.connectionState === "connecting"}
 	<div class="relative p-2">
 		<Input
 			type="text"
@@ -102,7 +108,7 @@
 			<p class="px-4 pt-2 text-red-200" transition:slide>{connectionError}</p>
 		{/if}
 
-		{#if ctx.roomCollab.connectionState === "connecting"}
+		{#if ctx.editor.room.connectionState === "connecting"}
 			<div class="absolute inset-0 bg-white/50 md:rounded-b-xl" transition:fade={{ duration: 200 }}>
 				<svg
 					class="h-5 w-5 animate-spin text-white"
@@ -155,7 +161,7 @@ Session
 		</div>
 
 		<ul class="-mr-1 ml-2 mt-4 space-y-2">
-			{#each ctx.roomCollab.state.users as user (user.uuid)}
+			{#each ctx.editor.room.users as user (user.uuid)}
 				<li class="flex flex-row items-center gap-4 overflow-visible">
 					<div
 						class="grid size-7 place-items-center rounded-full text-base font-bold"
@@ -217,7 +223,7 @@ Session
 						<span class="text-sm font-bold capitalize">{user.access_level}</span>
 					</div>
 
-					{#if ctx.roomCollab.state.accessLevel === "admin" && user.uuid !== ctx.roomCollab.state.userUuid}
+					{#if ctx.editor.room.accessLevel === "admin" && user.uuid !== ctx.editor.room.userUuid}
 						<button class="-ml-2 rounded p-0.5 text-gray-300 hover:bg-gray-600">
 							<span class="sr-only">Edit user</span>
 							<svg

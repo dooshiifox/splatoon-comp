@@ -6,6 +6,9 @@ import { uuid } from "$lib/uuid";
 import { copyText, unreachable, type OptionalKeys } from "albtc";
 import { linear, quadOut } from "svelte/easing";
 import { SvelteMap, SvelteSet } from "svelte/reactivity";
+import * as v from "valibot";
+
+const PROTOCOL = 1;
 
 // Colors from the server are always returned in #rrggbbaa format.
 const vColor = v.pipe(
@@ -81,15 +84,18 @@ type ScaleRate = v.InferOutput<typeof vScaleRate>;
 const vElement = v.object({
 	uuid: vUuid,
 	ty: vElementType,
-	last_edited_by: vUuid,
-	selected_by: v.array(vUuid),
+	last_edited_by: v.nullable(vUuid),
+	selected_by: v.pipe(
+		v.array(vUuid),
+		v.transform((i) => new SvelteSet(i))
+	),
 	x: v.number(),
 	y: v.number(),
 	anchor: vElementAnchor,
 	rotation: v.number(),
 	scale_rate: vScaleRate,
 	z_index: v.number(),
-	groups: v.pipe(
+	tags: v.pipe(
 		v.array(v.string()),
 		v.transform((i) => new SvelteSet(i))
 	)
@@ -138,6 +144,8 @@ type Conf = {
 	readonly clientHeight: number;
 	readonly canvasEl: HTMLElement | undefined;
 };
+export const LOCKED_TAG = "locked";
+export const NO_SYNC_TAG = "no-sync";
 export class Editor {
 	readonly conf: Conf;
 
@@ -190,6 +198,7 @@ export class Editor {
 	}
 
 	elements = $state<Record<string, Element>>({});
+	room = $state<RoomCollab>(new RoomCollab(this));
 
 	constructor(conf: Conf) {
 		this.conf = conf;
@@ -551,27 +560,35 @@ export class Editor {
 
 	selected = new SvelteSet<string>();
 	isElementSelected(id: string) {
-		return this.selected.has(id);
+		const isSelected = this.selected.has(id);
+		if (this.elements[id].selected_by.has(id) !== isSelected) {
+			console.warn("Desync between `selected_by` and `selected`");
+		}
+
+		return isSelected;
 	}
 	isOnlyElementSelected(id: string) {
 		return this.selected.has(id) && this.selected.size === 1;
 	}
 	selectElement(id: string) {
+		if (!this.elements[id]) return;
 		this.selected.add(id);
+		this.elements[id].selected_by.add(this.room.userUuid);
+		this.room.onSelectedElementsChange([...this.selected]);
 	}
 	deselectElement(id: string) {
 		this.selected.delete(id);
+		this.elements[id].selected_by.delete(this.room.userUuid);
+		this.room.onSelectedElementsChange([...this.selected]);
 	}
 	deselectAllElements() {
+		this.selected.forEach((id) => this.elements[id].selected_by.delete(this.room.userUuid));
 		this.selected.clear();
+		this.room.onSelectedElementsChange([]);
 	}
 
 	queuedFocus = $state<string>();
 
-	/** Generates a new ID. */
-	genId(): string {
-		return uuid();
-	}
 	/** Adds an element to the canvas.
 	 *
 	 *  Returns the ID of the newly-added element.
@@ -583,24 +600,24 @@ export class Editor {
 			| "scale_rate"
 			| "z_index"
 			| "rotation"
-			| "groups"
+			| "tags"
 			| "anchor"
 			| "selected_by"
 			| "last_edited_by"
 		>
 	): string {
 		const elementAdded: Element = {
-			uuid: this.genId(),
+			uuid: uuid(),
 			scale_rate: "base",
 			z_index: Object.values(this.elements).reduce((p, c) => Math.max(p, c.z_index), 0),
-			groups: new SvelteSet(),
+			tags: new SvelteSet(),
 			anchor: {
 				top: 0.5,
 				left: 0.5
 			},
 			rotation: 0,
-			last_edited_by: "TODO:",
-			selected_by: ["TODO:"],
+			last_edited_by: this.room.userUuid,
+			selected_by: new SvelteSet(),
 			...el
 		};
 		this.elements[elementAdded.uuid] = elementAdded;
@@ -633,7 +650,7 @@ export class Editor {
 		return found;
 	}
 	getElementsInGroup(group: string): Array<Element> {
-		return Object.values(this.elements).filter((el) => el.groups.has(group));
+		return Object.values(this.elements).filter((el) => el.tags.has(group));
 	}
 
 	/** Updates an element by its ID */
@@ -655,7 +672,7 @@ export class Editor {
 	/** Checks if an element is allowed to be selected. */
 	isElementSelectable(element: string | Element) {
 		const el = typeof element === "string" ? this.getElement(element) : element;
-		return !el?.groups.has("locked");
+		return !el?.tags.has(LOCKED_TAG);
 	}
 
 	locateElementFromNode(node: HTMLElement): string | null {
@@ -794,11 +811,25 @@ class TouchPoints {
 	}
 }
 
-const PROTOCOL = 1;
-import * as v from "valibot";
+type Command = SelectCommand;
+type SelectCommand = {
+	type: "select";
+	elements: Array<string>;
+};
+const commandResponse = {
+	select() {
+		return v.never();
+	}
+} as const satisfies {
+	[K in Command["type"]]: (
+		sent: Extract<Command, { type: K }>
+	) => v.BaseSchema<unknown, unknown, v.BaseIssue<unknown>>;
+};
+type CommandResponse<K extends keyof typeof commandResponse> = {
+	[K in keyof typeof commandResponse]: v.InferOutput<ReturnType<(typeof commandResponse)[K]>>;
+}[K];
 
 type CallbackCollection<T> = Array<(arg: T) => unknown>;
-
 export class RoomCollab {
 	connectionState = $state<"connecting" | "open" | "closing" | "closed">("closed");
 
@@ -808,10 +839,18 @@ export class RoomCollab {
 	private awaitCloseCallbacks: CallbackCollection<CloseEvent> = [];
 	private awaitErrorCallbacks: CallbackCollection<Event | undefined> = [];
 	private awaitMessageCallbacks: CallbackCollection<MessageEvent | undefined> = [];
+	private awaitIdCallbacks: Map<string, CallbackCollection<unknown>> = new Map();
 
-	state = $state<RoomCollabState>();
+	userUuid = $state<string>("SELF");
+	get user() {
+		return this.users.find((u) => u.uuid === this.userUuid);
+	}
+	get accessLevel() {
+		return this.user?.access_level ?? "view";
+	}
+	users = $state<Array<User>>([]);
 
-	constructor() {}
+	constructor(private editor: Editor) {}
 
 	async connect(url: string, room: string, username: string, color?: string, password?: string) {
 		if (this.isConnectionOpen()) {
@@ -845,16 +884,7 @@ export class RoomCollab {
 			this.awaitOpenCallbacks = [];
 		});
 		this.conn.addEventListener("close", (e) => {
-			// Call all close event listeners
-			this.connectionState = "closed";
-			this.conn = undefined;
-			this.state = undefined;
-			this.awaitCloseCallbacks.forEach((cb) => cb(e));
-			this.awaitCloseCallbacks = [];
-			this.awaitErrorCallbacks.forEach((cb) => cb(undefined));
-			this.awaitErrorCallbacks = [];
-			this.awaitMessageCallbacks.forEach((cb) => cb(undefined));
-			this.awaitMessageCallbacks = [];
+			this.onDisconnect(e);
 		});
 		this.conn.addEventListener("error", (e) => {
 			// Call all error event listeners
@@ -864,7 +894,7 @@ export class RoomCollab {
 		this.conn.addEventListener("message", (e) => {
 			// Call all message event listeners
 			// Try parse as JSON.
-			let data = undefined;
+			let data: unknown = undefined;
 			try {
 				data = JSON.parse(e.data);
 			} catch {
@@ -873,6 +903,11 @@ export class RoomCollab {
 			}
 			if (data !== undefined) {
 				this.onMessage(data, e);
+			}
+			if (typeof data === "object" && data && "id" in data && typeof data.id === "string") {
+				const callbacks = this.awaitIdCallbacks.get(data.id) ?? [];
+				callbacks.forEach((res) => res(data));
+				this.awaitIdCallbacks.delete(data.id);
 			}
 			this.awaitMessageCallbacks.forEach((cb) => cb(e));
 			this.awaitMessageCallbacks = [];
@@ -1022,6 +1057,22 @@ export class RoomCollab {
 		// close event listener handles setting all the state
 	}
 
+	onDisconnect(e: CloseEvent) {
+		this.connectionState = "closed";
+		this.conn = undefined;
+		this.userUuid = "SELF";
+
+		// Call all close event listeners
+		this.awaitCloseCallbacks.forEach((cb) => cb(e));
+		this.awaitCloseCallbacks = [];
+		this.awaitErrorCallbacks.forEach((cb) => cb(undefined));
+		this.awaitErrorCallbacks = [];
+		this.awaitMessageCallbacks.forEach((cb) => cb(undefined));
+		this.awaitMessageCallbacks = [];
+		this.awaitIdCallbacks.forEach((callbacks) => callbacks.forEach((res) => res(undefined)));
+		this.awaitIdCallbacks = new Map();
+	}
+
 	onMessage(json: unknown, _e: MessageEvent) {
 		const resp = v.safeParse(vMsg, json);
 		if (!resp.success) {
@@ -1031,23 +1082,62 @@ export class RoomCollab {
 
 		const msg = resp.output;
 		if (msg.type === "on_join") {
-			this.state = new RoomCollabState(msg.user.uuid, msg.users);
-			return;
-		}
-		if (!this.state) {
-			console.warn("Got message data but room state doesn't exist yet.");
+			this.userUuid = msg.user.uuid;
+			this.users = msg.users;
 			return;
 		}
 
 		if (msg.type === "join") {
-			this.state.userJoined(msg.user);
+			this.userJoined(msg.user);
 		} else if (msg.type === "disconnect") {
-			this.state.userDisconnected(msg.user);
+			this.userDisconnected(msg.user);
 		} else if (msg.type === "user_change") {
-			this.state.userChanged(msg.user);
+			this.userChanged(msg.user);
 		} else {
 			unreachable(msg);
 		}
+	}
+	userJoined(user: User) {
+		this.users.push(user);
+	}
+	userChanged(user: User) {
+		this.users = this.users.map((u) => (u.uuid === user.uuid ? user : u));
+	}
+	userDisconnected(userUuid: string) {
+		this.users = this.users.filter((u) => u.uuid !== userUuid);
+	}
+
+	/** Sends a command to the server.
+	 *
+	 *  If `id` is provided, the function will wait for a response from the
+	 *  server with the same id, validate, and return it. If the client
+	 *  disconnects before a response is received, it will return `undefined`.
+	 *
+	 *  If the client is not yet connected to the server, this will return `undefined`.
+	 */
+	async send<const C extends Command>(
+		json: C
+	): Promise<C["id"] extends string ? CommandResponse<C["type"]> | undefined : void> {
+		if (!this.isConnectionOpen() || !this.conn) return;
+
+		this.conn.send(JSON.stringify(json));
+
+		if ("id" in json) {
+			const resp = await this.awaitId(json.id);
+			// Disconnected
+			if (resp === undefined) return;
+
+			// Validate
+			const validated = v.safeParse(commandResponse[json.type](json), resp);
+			if (!validated.success) return;
+			return validated.output as CommandResponse<C["type"]>;
+		}
+	}
+	onSelectedElementsChange(elementIds: Array<string>) {
+		this.send({
+			type: "select",
+			elements: elementIds
+		});
 	}
 
 	/** Awaits for the connection to become open from the connecting state.
@@ -1099,30 +1189,18 @@ export class RoomCollab {
 			this.awaitMessageCallbacks.push(res);
 		});
 	}
-}
+	/** Awaits for the connection to receive a message with a given `id`.
+	 *
+	 *  If the connection is closed, this will resolve instantly. If the
+	 *  connection closes before a response is received, this will resolve
+	 *  with `undefined`.
+	 */
+	awaitId(id: string) {
+		if (this.isConnectionClosed()) return;
 
-class RoomCollabState {
-	userUuid = $state<string>();
-	get user() {
-		return this.users.find((u) => u.uuid === this.userUuid);
-	}
-	get accessLevel() {
-		return this.user?.access_level ?? "view";
-	}
-	users = $state<Array<User>>([]);
-
-	constructor(userUuid: string, users: Array<User>) {
-		this.userUuid = userUuid;
-		this.users = users;
-	}
-
-	userJoined(user: User) {
-		this.users.push(user);
-	}
-	userChanged(user: User) {
-		this.users = this.users.map((u) => (u.uuid === user.uuid ? user : u));
-	}
-	userDisconnected(userUuid: string) {
-		this.users = this.users.filter((u) => u.uuid !== userUuid);
+		return new Promise<unknown>((res) => {
+			const existingCallbacks = this.awaitIdCallbacks.get(id);
+			this.awaitIdCallbacks.set(id, [...(existingCallbacks ?? []), res]);
+		});
 	}
 }

@@ -14,7 +14,7 @@ pub struct Element {
     /// that comes with it.
     ty: ElementType,
     /// The last user to have edited it.
-    last_edited_by: Uuid,
+    last_edited_by: Option<Uuid>,
     /// The editors or hosts who are currently selecting this element.
     selected_by: Vec<Uuid>,
     /// The X position of this element.
@@ -31,17 +31,17 @@ pub struct Element {
     /// The z-ordering of this element, relative to other elements.
     /// Higher means further in front.
     z_index: f64,
-    /// Groups added to this element. This allows code to reference different
+    /// Tags added to this element. This allows code to reference different
     /// elements with a single string, for example to make all elements
     /// on a layer invisible.
-    groups: HashSet<String>,
+    tags: HashSet<String>,
 }
 impl Element {
     pub fn new(el: ElementType) -> Self {
         Element {
             uuid: Uuid::new_v4(),
             ty: el,
-            last_edited_by: Uuid::new_v4(),
+            last_edited_by: None,
             selected_by: vec![],
             x: 0.,
             y: 0.,
@@ -49,7 +49,7 @@ impl Element {
             rotation: 0.,
             scale_rate: ScaleRate::default(),
             z_index: 0.,
-            groups: HashSet::default(),
+            tags: HashSet::default(),
         }
     }
 }
