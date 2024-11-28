@@ -37,9 +37,7 @@ class Selectable<T extends Item> {
 	active = $state<{ key: ItemKey<T>; index: number } | null>(null);
 
 	/** All the HTML elements mapped to their key */
-	itemsWithNode = $state<
-		Array<{ readonly node: HTMLElement; readonly key: ItemKey<T> }>
-	>([]);
+	itemsWithNode = $state<Array<{ readonly node: HTMLElement; readonly key: ItemKey<T> }>>([]);
 
 	/** When holding shift and using arrow keys or mouse, this is the item
 	 *  that is at the start or end of the selection.
@@ -47,9 +45,7 @@ class Selectable<T extends Item> {
 	currentShiftAnchor = $state<ItemKey<T> | null>(null);
 	selected = $state<Array<ItemKey<T>>>([]);
 
-	constructor(
-		public config: { readonly items: Array<T>; readonly multi: boolean }
-	) {}
+	constructor(public config: { readonly items: Array<T>; readonly multi: boolean }) {}
 
 	/** Returns the uniquely-identifying key for a given item. */
 	getKey(item: T | ItemKey<T>): ItemKey<T> {
@@ -165,9 +161,7 @@ class Selectable<T extends Item> {
 	}
 
 	get selectedItems(): Array<T> {
-		return this.selected
-			.map((key) => this.getItem(key))
-			.filter((x): x is T => x !== null);
+		return this.selected.map((key) => this.getItem(key)).filter((x): x is T => x !== null);
 	}
 
 	/** Gets the active item. */
@@ -195,11 +189,7 @@ class Selectable<T extends Item> {
 		// Check item exists
 		const itemIndex = this.getIndex(key);
 		if (itemIndex === null) {
-			console.warn(
-				"Tried to select item",
-				key,
-				"but it doesn't exist in the list."
-			);
+			console.warn("Tried to select item", key, "but it doesn't exist in the list.");
 			return;
 		}
 
@@ -299,7 +289,7 @@ class Selectable<T extends Item> {
 		const startFrom =
 			this.active === null
 				? this.items.length
-				: this.getIndex(this.active.key) ?? this.active.index;
+				: (this.getIndex(this.active.key) ?? this.active.index);
 
 		// Find the previous active item.
 		const previous = this.lastActiveSelectable(startFrom - 1);
@@ -314,9 +304,7 @@ class Selectable<T extends Item> {
 		// Start from the current active item
 		// If nothing active, start from the start
 		const startFrom =
-			this.active === null
-				? 0
-				: (this.getIndex(this.active.key) ?? this.active.index) + 1;
+			this.active === null ? 0 : (this.getIndex(this.active.key) ?? this.active.index) + 1;
 
 		// Find the next active item.
 		const next = this.firstActiveSelectable(startFrom);
@@ -380,7 +368,8 @@ export function createSelectable<T extends Item>(init: {
 					first: () => state.focusFirst(),
 					previous: () => state.focusPrevious(),
 					next: () => state.focusNext(),
-					last: () => state.focusLast()
+					last: () => state.focusLast(),
+					orientation: "vertical"
 				})
 			),
 			onPointerMoveChild('[role="option"]', (n) => state.focusByNode(n, false)),

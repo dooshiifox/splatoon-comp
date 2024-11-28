@@ -22,14 +22,7 @@ import {
 	keyTab,
 	keyUp
 } from "./internal/key";
-import {
-	activate,
-	getKey,
-	isKeySelected,
-	itemsEqual,
-	raiseSelectOnChange,
-	unselectItem
-} from "./internal/list";
+import { activate, getKey, isKeySelected, itemsEqual, unselectItem } from "./internal/list";
 import type { Item, ItemKey } from "./internal/types";
 import { noop, setUniqueNodeId } from "./internal/utils.svelte";
 
@@ -322,6 +315,7 @@ class Listbox<T extends Item> {
 	 */
 	select() {
 		const newSelected = this.selectActive();
+		if (newSelected.every((v, i) => getKey(v) === getKey(this.selected[i]))) return;
 		this.selected = newSelected;
 		this.onselect(newSelected);
 	}
@@ -398,8 +392,7 @@ export function createListbox<T extends Item>(init?: Partial<ListboxConfig<T>>) 
 				keyUp(() => state.toggle()),
 				keyDown(() => state.toggle())
 			),
-			focusOnClose(state),
-			raiseSelectOnChange(state)
+			focusOnClose(state)
 		]);
 
 		return {
@@ -449,7 +442,8 @@ export function createListbox<T extends Item>(init?: Partial<ListboxConfig<T>>) 
 					first: () => state.focusFirst(),
 					previous: () => state.focusPrevious(),
 					next: () => state.focusNext(),
-					last: () => state.focusLast()
+					last: () => state.focusLast(),
+					orientation: "vertical"
 				}),
 				keyTab(noop),
 				keyCharacter((char) => state.searchAndFocus(char, true))

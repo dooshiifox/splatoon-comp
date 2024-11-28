@@ -392,6 +392,7 @@ class Combobox<T extends Item> {
 	 */
 	select() {
 		const newSelected = this.selectActive();
+		if (newSelected.every((v, i) => getKey(v) === getKey(this.selected[i]))) return;
 		this.selected = newSelected;
 		this.onselect(newSelected);
 	}
@@ -501,7 +502,8 @@ export function createCombobox<T extends Item>(init?: Partial<ComboboxConfig<T>>
 					first: () => state.focusFirst(),
 					previous: () => state.focusPrevious(),
 					next: () => state.focusNext(),
-					last: () => state.focusLast()
+					last: () => state.focusLast(),
+					orientation: "vertical"
 				}),
 				keyTabAllow(() => {
 					state.select();

@@ -261,7 +261,8 @@ export function createMenu<T extends Item>(init?: Partial<MenuConfig<T>>) {
 					first: () => state.focusFirst(),
 					previous: () => state.focusPrevious(),
 					next: () => state.focusNext(),
-					last: () => state.focusLast()
+					last: () => state.focusLast(),
+					orientation: "vertical"
 				}),
 				keyTab(noop),
 				keyCharacter((char) => state.searchAndFocus(char, true))

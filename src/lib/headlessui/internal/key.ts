@@ -65,7 +65,7 @@ export function keyNavigation(settings: {
 	previous: Callable;
 	next: Callable;
 	last: Callable;
-	readonly orientation?: Orientation;
+	readonly orientation: Orientation;
 }): KeyHandler {
 	return (event) => {
 		const prevKey = settings.orientation === "vertical" ? ArrowUp : ArrowLeft;

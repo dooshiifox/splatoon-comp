@@ -89,6 +89,7 @@
 		innerShow = show ?? parent?.show ?? null;
 	});
 
+	// svelte-ignore state_referenced_locally
 	if (innerShow === null) {
 		throw new Error(
 			"Transition must be used as a child of a Transition with `show` set to `true` or `false`"
@@ -113,7 +114,9 @@
 	};
 
 	// initial state
+	// svelte-ignore state_referenced_locally
 	let display = $state(innerShow === true && !context.appear ? "contents" : "none");
+	// svelte-ignore state_referenced_locally
 	let mounted = $state(!unmount || innerShow === true);
 
 	// set context for children to use
