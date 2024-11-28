@@ -21,6 +21,7 @@ const vPercentage = v.pipe(v.number(), v.minValue(0), v.maxValue(1));
 const vCanvas = v.pipe(v.number(), v.minValue(0), v.maxValue(65535));
 const vUuid = v.pipe(v.string(), v.uuid());
 const vAccessLevel = v.picklist(["view", "edit", "admin"]);
+type AccessLevel = v.InferOutput<typeof vAccessLevel>;
 const vUser = v.object({
 	color: vColor,
 	username: v.string(),
@@ -85,10 +86,7 @@ const vElement = v.object({
 	uuid: vUuid,
 	ty: vElementType,
 	last_edited_by: v.nullable(vUuid),
-	selected_by: v.pipe(
-		v.array(vUuid),
-		v.transform((i) => new SvelteSet(i))
-	),
+	selected_by: v.nullable(vUuid),
 	x: v.number(),
 	y: v.number(),
 	anchor: vElementAnchor,
@@ -120,7 +118,72 @@ const vMsgUserChange = v.object({
 	type: v.literal("user_change"),
 	user: vUser
 });
-const vMsg = v.variant("type", [vMsgJoin, vMsgOnJoin, vMsgDisconnect, vMsgUserChange]);
+const vMsgSelection = v.object({
+	type: v.literal("selection"),
+	user_uuid: vUuid,
+	newly_selected: v.array(vUuid),
+	newly_deselected: v.array(vUuid)
+});
+const vMsgSelectionResponse = v.object({
+	type: v.literal("selection_response"),
+	user_uuid: vUuid,
+	newly_selected: v.array(vUuid),
+	newly_deselected: v.array(vUuid),
+	failed_to_select: v.array(vUuid)
+});
+const vMsg = v.variant("type", [
+	vMsgJoin,
+	vMsgOnJoin,
+	vMsgDisconnect,
+	vMsgUserChange,
+	vMsgSelection,
+	vMsgSelectionResponse
+]);
+
+type Command = { id?: string } & (SelectCommand | AccessLevelAdjustmentCommand);
+type SelectCommand = {
+	type: "selection";
+	elements: Array<string>;
+};
+type AccessLevelAdjustmentCommand = {
+	type: "access_level_adjustment";
+	user: string;
+	access_level: AccessLevel;
+};
+const commandResponse = {
+	selection(_) {
+		return {
+			data: vMsgSelectionResponse,
+			error: v.object({
+				code: v.picklist(["no_permission", "room_does_not_exist"])
+			})
+		};
+	},
+	access_level_adjustment(_) {
+		return {
+			data: vMsgUserChange,
+			error: v.object({
+				code: v.picklist(["no_permission", "room_does_not_exist", "user_does_not_exist"])
+			})
+		};
+	}
+} as const satisfies {
+	[K in Command["type"]]: (sent: Extract<Command, { type: K }>) => {
+		data: v.BaseSchema<unknown, unknown, v.BaseIssue<unknown>>;
+		error: v.BaseSchema<unknown, unknown, v.BaseIssue<unknown>>;
+	};
+};
+type CommandResponse<K extends keyof typeof commandResponse> = {
+	[K in keyof typeof commandResponse]:
+		| {
+				data: v.InferOutput<ReturnType<(typeof commandResponse)[K]>["data"]>;
+				error: never;
+		  }
+		| {
+				data: never;
+				error: v.InferOutput<ReturnType<(typeof commandResponse)[K]>["error"]>;
+		  };
+}[K];
 
 function applyScale(n: number, scale: ScaleRate) {
 	if (scale === "none") return 1;
@@ -155,15 +218,15 @@ export class Editor {
 	get clientHeight() {
 		return this.conf.clientHeight;
 	}
-	zoom = tweenedState(1, {
+	readonly zoom = tweenedState(1, {
 		duration: 100,
 		easing: quadOut
 	});
-	offsetX = tweenedState(0, {
+	readonly offsetX = tweenedState(0, {
 		duration: 0,
 		easing: linear
 	});
-	offsetY = tweenedState(0, {
+	readonly offsetY = tweenedState(0, {
 		duration: 0,
 		easing: linear
 	});
@@ -198,7 +261,7 @@ export class Editor {
 	}
 
 	elements = $state<Record<string, Element>>({});
-	room = $state<RoomCollab>(new RoomCollab(this));
+	room = new RoomCollab(this);
 
 	constructor(conf: Conf) {
 		this.conf = conf;
@@ -558,33 +621,50 @@ export class Editor {
 		);
 	}
 
-	selected = new SvelteSet<string>();
+	// Note about element selection:
+	// `selected` should be taken as the source of truth for what the user
+	// has selected, not `selected_by`.
+	// `selected_by` is what the server says is selected,
+	readonly selected = new SvelteSet<string>();
 	isElementSelected(id: string) {
-		const isSelected = this.selected.has(id);
-		if (this.elements[id].selected_by.has(id) !== isSelected) {
-			console.warn("Desync between `selected_by` and `selected`");
-		}
-
-		return isSelected;
+		return this.selected.has(id);
+	}
+	/** Get the user this element is selected by. */
+	getSelectedBy(id: string): User | undefined {
+		const selectedBy = this.getElement(id)?.selected_by;
+		return !selectedBy ? undefined : this.room.getUser(selectedBy);
 	}
 	isOnlyElementSelected(id: string) {
 		return this.selected.has(id) && this.selected.size === 1;
 	}
 	selectElement(id: string) {
-		if (!this.elements[id]) return;
+		if (!this.elements[id] || this.selected.has(id) || this.room.accessLevel === "view") return;
 		this.selected.add(id);
-		this.elements[id].selected_by.add(this.room.userUuid);
 		this.room.onSelectedElementsChange([...this.selected]);
 	}
 	deselectElement(id: string) {
+		if (!this.selected.has(id)) return;
 		this.selected.delete(id);
-		this.elements[id].selected_by.delete(this.room.userUuid);
 		this.room.onSelectedElementsChange([...this.selected]);
 	}
 	deselectAllElements() {
-		this.selected.forEach((id) => this.elements[id].selected_by.delete(this.room.userUuid));
+		if (this.selected.size === 0) return;
 		this.selected.clear();
 		this.room.onSelectedElementsChange([]);
+	}
+	isEditable(ids: Array<string>): boolean {
+		if (this.room.accessLevel === "view") return false;
+
+		// For each ID, check if it is selected by someone other than this user
+		for (const id of ids) {
+			const el = this.getElement(id);
+			if (!el) continue;
+			// Make sure this is the only user who has it selected
+			if (el.selected_by !== null && el.selected_by !== this.room.userUuid) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	queuedFocus = $state<string>();
@@ -617,7 +697,7 @@ export class Editor {
 			},
 			rotation: 0,
 			last_edited_by: this.room.userUuid,
-			selected_by: new SvelteSet(),
+			selected_by: null,
 			...el
 		};
 		this.elements[elementAdded.uuid] = elementAdded;
@@ -671,8 +751,12 @@ export class Editor {
 
 	/** Checks if an element is allowed to be selected. */
 	isElementSelectable(element: string | Element) {
+		if (this.room.accessLevel === "view") return false;
+
 		const el = typeof element === "string" ? this.getElement(element) : element;
-		return !el?.tags.has(LOCKED_TAG);
+		return (
+			el && !el.tags.has(LOCKED_TAG) && (!el.selected_by || el.selected_by === this.room.userUuid)
+		);
 	}
 
 	locateElementFromNode(node: HTMLElement): string | null {
@@ -811,25 +895,15 @@ class TouchPoints {
 	}
 }
 
-type Command = SelectCommand;
-type SelectCommand = {
-	type: "select";
-	elements: Array<string>;
-};
-const commandResponse = {
-	select() {
-		return v.never();
-	}
-} as const satisfies {
-	[K in Command["type"]]: (
-		sent: Extract<Command, { type: K }>
-	) => v.BaseSchema<unknown, unknown, v.BaseIssue<unknown>>;
-};
-type CommandResponse<K extends keyof typeof commandResponse> = {
-	[K in keyof typeof commandResponse]: v.InferOutput<ReturnType<(typeof commandResponse)[K]>>;
-}[K];
-
 type CallbackCollection<T> = Array<(arg: T) => unknown>;
+const DEFAULT_UUID = "SELF";
+const DEFAULT_USER: User = {
+	access_level: "admin",
+	canvas: 0,
+	color: Color.fromRgb("#3b82f6")!,
+	username: "You",
+	uuid: DEFAULT_UUID
+};
 export class RoomCollab {
 	connectionState = $state<"connecting" | "open" | "closing" | "closed">("closed");
 
@@ -841,14 +915,19 @@ export class RoomCollab {
 	private awaitMessageCallbacks: CallbackCollection<MessageEvent | undefined> = [];
 	private awaitIdCallbacks: Map<string, CallbackCollection<unknown>> = new Map();
 
-	userUuid = $state<string>("SELF");
+	userUuid = $state<string>(DEFAULT_UUID);
 	get user() {
-		return this.users.find((u) => u.uuid === this.userUuid);
+		const u = this.users.find((u) => u.uuid === this.userUuid);
+		if (!u) throw new Error("Cannot find user.");
+		return u;
 	}
 	get accessLevel() {
-		return this.user?.access_level ?? "view";
+		return this.user.access_level;
 	}
-	users = $state<Array<User>>([]);
+	users = $state<Array<User>>([DEFAULT_USER]);
+	getUser(userId: string) {
+		return this.users.find(({ uuid }) => userId === uuid);
+	}
 
 	constructor(private editor: Editor) {}
 
@@ -1060,7 +1139,8 @@ export class RoomCollab {
 	onDisconnect(e: CloseEvent) {
 		this.connectionState = "closed";
 		this.conn = undefined;
-		this.userUuid = "SELF";
+		this.userUuid = DEFAULT_UUID;
+		this.users = [DEFAULT_USER];
 
 		// Call all close event listeners
 		this.awaitCloseCallbacks.forEach((cb) => cb(e));
@@ -1074,37 +1154,87 @@ export class RoomCollab {
 	}
 
 	onMessage(json: unknown, _e: MessageEvent) {
-		const resp = v.safeParse(vMsg, json);
+		const resp = v.safeParse(
+			v.object({
+				id: v.nullable(vUuid),
+				data: vMsg
+			}),
+			json
+		);
 		if (!resp.success) {
 			console.warn("Couldn't parse server message as a valid response:", json, resp.issues);
 			return;
 		}
 
-		const msg = resp.output;
+		const msg = resp.output.data;
+		console.log(msg);
 		if (msg.type === "on_join") {
-			this.userUuid = msg.user.uuid;
-			this.users = msg.users;
-			return;
-		}
-
-		if (msg.type === "join") {
+			this.onJoin(msg);
+		} else if (msg.type === "join") {
 			this.userJoined(msg.user);
 		} else if (msg.type === "disconnect") {
 			this.userDisconnected(msg.user);
 		} else if (msg.type === "user_change") {
 			this.userChanged(msg.user);
+		} else if (msg.type === "selection" || msg.type === "selection_response") {
+			this.onUsersSelection(msg);
 		} else {
 			unreachable(msg);
 		}
+	}
+	onJoin(msg: v.InferOutput<typeof vMsgOnJoin>) {
+		this.userUuid = msg.user.uuid;
+		this.users = msg.users;
+		this.editor.elements = Object.fromEntries(msg.elements.map((el) => [el.uuid, el]));
 	}
 	userJoined(user: User) {
 		this.users.push(user);
 	}
 	userChanged(user: User) {
 		this.users = this.users.map((u) => (u.uuid === user.uuid ? user : u));
+		if (user.access_level === "view") {
+			// Deselect all their elements
+			// If its the client, clear 'selected' too
+			for (const el in this.editor.elements) {
+				if (this.editor.elements[el].selected_by === user.uuid) {
+					this.editor.elements[el].selected_by = null;
+				}
+			}
+			if (this.userUuid === user.uuid) {
+				this.editor.selected.clear();
+			}
+		}
 	}
 	userDisconnected(userUuid: string) {
 		this.users = this.users.filter((u) => u.uuid !== userUuid);
+		// Deselect all their elements
+		for (const el in this.editor.elements) {
+			if (this.editor.elements[el].selected_by === userUuid) {
+				this.editor.elements[el].selected_by = null;
+			}
+		}
+	}
+	onUsersSelection(
+		msg: v.InferOutput<typeof vMsgSelection> | v.InferOutput<typeof vMsgSelectionResponse>
+	) {
+		for (const selectedElId of msg.newly_selected) {
+			this.editor.elements[selectedElId].selected_by = msg.user_uuid;
+			if (this.editor.selected.has(selectedElId) && msg.user_uuid !== this.userUuid) {
+				this.editor.selected.delete(selectedElId);
+			}
+		}
+		for (const deselectedElId of msg.newly_deselected) {
+			if (this.editor.elements[deselectedElId].selected_by === msg.user_uuid) {
+				this.editor.elements[deselectedElId].selected_by = null;
+			}
+		}
+
+		if (msg.type === "selection_response") {
+			// Deselect all that failed to be selected
+			for (const id of msg.failed_to_select) {
+				this.editor.selected.delete(id);
+			}
+		}
 	}
 
 	/** Sends a command to the server.
@@ -1122,21 +1252,49 @@ export class RoomCollab {
 
 		this.conn.send(JSON.stringify(json));
 
-		if ("id" in json) {
+		if (json.id) {
 			const resp = await this.awaitId(json.id);
 			// Disconnected
 			if (resp === undefined) return;
 
+			// @ts-expect-error TS can't infer correct types here?
+			const expectedTypes = commandResponse[json.type](json);
+			const dataType = v.union([
+				v.object({
+					id: vUuid,
+					data: expectedTypes.data,
+					error: v.optional(v.never())
+				}),
+				v.object({
+					id: vUuid,
+					data: v.optional(v.never()),
+					error: expectedTypes.error
+				})
+			]);
+
 			// Validate
-			const validated = v.safeParse(commandResponse[json.type](json), resp);
+			const validated = v.safeParse(dataType, resp);
 			if (!validated.success) return;
+			// @ts-expect-error TS can't infer correct types here
 			return validated.output as CommandResponse<C["type"]>;
 		}
 	}
-	onSelectedElementsChange(elementIds: Array<string>) {
-		this.send({
-			type: "select",
+	async onSelectedElementsChange(elementIds: Array<string>) {
+		const selection = await this.send({
+			id: uuid(),
+			type: "selection",
 			elements: elementIds
+		});
+		if (!selection || selection.error) {
+			this.editor.selected.clear();
+		}
+	}
+	changeAccessLevel(userId: string, to: AccessLevel) {
+		return this.send({
+			id: uuid(),
+			type: "access_level_adjustment",
+			user: userId,
+			access_level: to
 		});
 	}
 

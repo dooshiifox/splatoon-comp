@@ -5,8 +5,6 @@
 <svg
 	class={class_}
 	enable-background="new 0 0 35 35"
-	width="35"
-	height="35"
 	viewBox="0 0 35 35"
 	xmlns="http://www.w3.org/2000/svg"
 	xmlns:xlink="http://www.w3.org/1999/xlink"

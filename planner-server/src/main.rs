@@ -1,6 +1,5 @@
 #![feature(async_drop)]
 #![feature(let_chains)]
-
 use std::{
     borrow::Cow,
     collections::HashMap,
@@ -30,8 +29,8 @@ use tokio_tungstenite::tungstenite::{
 use tracing::{error, info, level_filters::LevelFilter, trace, warn};
 use uuid::Uuid;
 
-pub mod commands;
-pub mod state;
+pub(crate) mod commands;
+pub(crate) mod state;
 
 const PROTOCOL_VERSION: usize = 1;
 
@@ -46,6 +45,10 @@ struct Cli {
     /// The IP address and port to host on.
     #[arg(default_value_t = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 10999))]
     ip: SocketAddr,
+    /// The debug level to use. Can specify up to 3 times for increasing
+    /// log levels.
+    #[arg(short, long, action = clap::ArgAction::Count)]
+    verbose: u8,
 }
 
 ////////
@@ -86,11 +89,20 @@ async fn handle_connection(
     };
 
     let broadcast_incoming = incoming.try_for_each(|msg| {
-        trace!(
-            "Received a message from {}: {}",
-            addr,
-            msg.to_text().unwrap()
-        );
+        if msg.is_text() {
+            let text = msg.to_text().unwrap();
+            trace!("Received a message from {addr}: {text}");
+            // Try parse as 'Receive'
+            let receive = match serde_json::from_str::<commands::ReceiveData>(text) {
+                Ok(t) => t,
+                Err(_) => {
+                    warn!("Couldn't parse message from {addr} as `Receive`: {text}");
+                    return future::ok(());
+                }
+            };
+            // Now process the request
+            receive.process(app.clone(), &room_name, addr)
+        }
         future::ok(())
     });
 
@@ -386,12 +398,17 @@ async fn handle_request(
 
 #[tokio::main]
 async fn main() {
+    let cli = Cli::parse();
+
     let subscriber = tracing_subscriber::fmt()
-        .with_max_level(LevelFilter::TRACE)
+        .with_max_level(match cli.verbose {
+            0 => LevelFilter::WARN,
+            1 => LevelFilter::INFO,
+            2 => LevelFilter::DEBUG,
+            _ => LevelFilter::TRACE,
+        })
         .finish();
     tracing::subscriber::set_global_default(subscriber).unwrap();
-
-    let cli = Cli::parse();
 
     let addr = cli.ip;
     let listener = TcpListener::bind(addr).await.unwrap_or_else(|e| {

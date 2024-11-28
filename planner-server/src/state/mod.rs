@@ -1,10 +1,11 @@
+use crate::commands::{self, AnnounceTo, AnnounceType, ErrorType};
 use element::{Element, ElementText, ElementType};
 use futures_channel::mpsc::UnboundedSender;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, net::SocketAddr};
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{trace, warn};
-use user::AccessLevel;
+use user::{AccessLevel, User};
 use uuid::Uuid;
 
 pub mod color;
@@ -12,8 +13,6 @@ pub mod element;
 pub mod user;
 
 pub use color::Color;
-
-use crate::commands;
 
 #[derive(Default, Debug)]
 pub struct App {
@@ -53,6 +52,17 @@ impl App {
     }
 }
 
+#[derive(Serialize)]
+pub struct CommandError {
+    id: Uuid,
+    error: commands::ErrorType,
+}
+#[derive(Serialize)]
+pub struct CommandAnnounce {
+    id: Option<Uuid>,
+    data: commands::AnnounceType,
+}
+
 #[derive(Debug)]
 pub struct Room {
     /// The name of this room.
@@ -67,6 +77,7 @@ pub struct Room {
 impl Room {
     /// Creates a new empty room.
     pub fn new(room_name: String, room_password: Option<String>) -> Room {
+        trace!("Creating room `{room_name}`");
         Room {
             name: room_name,
             users: vec![],
@@ -98,6 +109,10 @@ impl Room {
     pub fn get_user_mut(&mut self, user: Uuid) -> Option<&mut RoomUser> {
         self.users.iter_mut().find(|u| u.uuid == user)
     }
+    /// Retrieves a user from their socket address.
+    pub fn get_user_from_addr(&self, user: SocketAddr) -> Option<&RoomUser> {
+        self.users.iter().find(|u| u.addr == user)
+    }
     /// Returns the current admin of the room
     pub fn get_admin(&self) -> Option<&RoomUser> {
         self.users
@@ -115,19 +130,26 @@ impl Room {
             self.name,
             user.access_level
         );
-        self.announce_all(commands::join::Announce {
-            user: user.clone().into(),
-        });
+        self.announce_to_all(
+            commands::AnnounceType::Join {
+                user: user.clone().into(),
+            },
+            None,
+        );
 
         let elements = self.get_or_create_canvas(user.canvas).elements.clone();
         self.users.push(user);
         let user = self.users.last().unwrap();
 
-        user.send(&commands::Announce::from(commands::join::Respond {
-            user: user.clone().into(),
-            users: self.users.iter().map(|x| x.clone().into()).collect(),
-            elements,
-        }))
+        self.respond_to_user(
+            user.addr,
+            commands::AnnounceType::OnJoin {
+                user: user.clone().into(),
+                users: self.users.iter().map(|x| x.clone().into()).collect(),
+                elements,
+            },
+            None,
+        )
     }
     /// Remove a user from the room.
     /// Use [`App::disconnect_user`] for this, as it will also remove the room
@@ -148,14 +170,26 @@ impl Room {
         }
         let removed_user = removed_user.unwrap();
         removed_user.tx.close_channel();
+
+        // Deselect everything they had selected
+        let canvas = self.get_or_create_canvas(removed_user.canvas);
+        for el in &mut canvas.elements {
+            if el.selected_by.is_some_and(|u| u == removed_user.uuid) {
+                el.selected_by = None
+            }
+        }
+
         if self.users.is_empty() {
             return true;
         }
 
         // Notify all remaining users that someone left.
-        self.announce_all(commands::disconnect::Announce {
-            user: removed_user.uuid,
-        });
+        self.announce_to_all(
+            commands::AnnounceType::Disconnect {
+                user: removed_user.uuid,
+            },
+            None,
+        );
 
         // Check we have an admin in the lobby.
         if removed_user.access_level == AccessLevel::Admin {
@@ -172,57 +206,90 @@ impl Room {
     }
 
     /// Send an announcement to everyone but one user.
-    pub fn announce<T: Into<commands::Announce>>(&self, announcement: T, ignored_user: Uuid) {
-        let msg =
-            serde_json::to_string(&announcement.into()).expect("failed to serialize announcement");
-        for user in &self.users {
-            if user.uuid != ignored_user {
-                user.send_str(&msg);
+    pub fn announce(
+        &self,
+        announcement: Result<AnnounceTo, ErrorType>,
+        sender: SocketAddr,
+        id: Option<Uuid>,
+    ) {
+        match announcement {
+            Ok(AnnounceTo::All(t)) => self.announce_to_all(t, id),
+            Ok(AnnounceTo::Respond(t)) => self.respond_to_user(sender, t, id),
+            Ok(AnnounceTo::ResponseAndAnnounce { respond, announce }) => {
+                self.respond_and_announce(announce, sender, respond, id)
             }
+            Ok(AnnounceTo::None) => {}
+            Err(error) => self.respond_error(sender, error, id),
         }
     }
-
-    /// Send an announcement to everyone but one user, who receieves a different
-    /// response.
-    pub fn announce_respond<A: Into<commands::Announce>, R: Into<commands::Announce>>(
-        &self,
-        announcement: A,
-        responded_user: Uuid,
-        response: R,
-    ) {
-        let msg =
-            serde_json::to_string(&announcement.into()).expect("failed to serialize announcement");
-        let r_msg = response.into();
+    pub fn announce_to_all(&self, data: AnnounceType, id: Option<Uuid>) {
+        let msg = serde_json::to_string(&CommandAnnounce { id, data })
+            .expect("failed to serialize announcement");
         for user in &self.users {
-            if user.uuid == responded_user {
+            user.send_str(&msg);
+        }
+    }
+    pub fn respond_to_user(&self, sender: SocketAddr, data: AnnounceType, id: Option<Uuid>) {
+        if let Some(user) = self.get_user_from_addr(sender) {
+            user.send(&CommandAnnounce { id, data })
+        }
+    }
+    pub fn respond_and_announce(
+        &self,
+        announce: AnnounceType,
+        sender: SocketAddr,
+        respond: AnnounceType,
+        id: Option<Uuid>,
+    ) {
+        let msg = serde_json::to_string(&CommandAnnounce {
+            id: None,
+            data: announce,
+        })
+        .expect("failed to serialize announcement");
+        let r_msg = CommandAnnounce { id, data: respond };
+        for user in &self.users {
+            if user.addr == sender {
                 user.send(&r_msg);
             } else {
                 user.send_str(&msg);
             }
         }
     }
-
-    /// Send an announcement to everyone.
-    pub fn announce_all<T: Into<commands::Announce>>(&self, announcement: T) {
-        let msg =
-            serde_json::to_string(&announcement.into()).expect("failed to serialize announcement");
-        for user in &self.users {
-            user.send_str(&msg);
+    pub fn respond_error(&self, sender: SocketAddr, error: ErrorType, id: Option<Uuid>) {
+        if let Some(id) = id
+            && let Some(user) = self.get_user_from_addr(sender)
+        {
+            user.send(&CommandError { id, error });
         }
     }
 
     /// Changes the access level of a user.
-    pub fn change_access_level(&mut self, user: Uuid, access_level: AccessLevel) {
-        let found_user = self.get_user_mut(user);
-        if found_user.is_none() {
-            return;
-        }
+    ///
+    /// Returns whether the user was found.
+    pub fn change_access_level(&mut self, user: Uuid, access_level: AccessLevel) -> bool {
+        let Some(found_user) = self.get_user_mut(user) else {
+            return false;
+        };
 
         // Promote the user
-        let found_user = found_user.unwrap();
         found_user.access_level = access_level;
-        let found_user = found_user.clone().into();
-        self.announce_all(commands::AnnounceType::UserChange { user: found_user });
+        let found_user: User = found_user.clone().into();
+
+        // If we're demoting someone to view-only, deselect everything
+        if access_level == AccessLevel::View {
+            // Deselect everything they had selected
+            let canvas = self.get_or_create_canvas(found_user.canvas);
+            for el in &mut canvas.elements {
+                if el.selected_by.is_some_and(|u| u == found_user.uuid) {
+                    el.selected_by = None
+                }
+            }
+        }
+
+        self.announce_to_all(
+            commands::AnnounceType::UserChange { user: found_user },
+            None,
+        );
 
         // If we're promoting someone to admin, make sure we don't end up with
         // 2 admins!
@@ -235,14 +302,17 @@ impl Room {
             // Demote the old admin to edit access
             admin.access_level = AccessLevel::Edit;
             let admin = admin.clone().into();
-            self.announce_all(commands::AnnounceType::UserChange { user: admin });
+            self.announce_to_all(commands::AnnounceType::UserChange { user: admin }, None);
         }
+
+        true
     }
 
     pub fn save_to_file(&self) {}
 }
 impl Drop for Room {
     fn drop(&mut self) {
+        trace!("Deleting room `{}`", self.name);
         self.save_to_file()
     }
 }
@@ -260,9 +330,7 @@ pub struct RoomUser {
 impl RoomUser {
     /// Sends a personalized message to this user.
     ///
-    /// If you want to send the same message to multiple users, prefer
-    /// [`Room::announce`], [`Room::announce_respond`], or [`Room::announce_all`],
-    /// as this will prevent re-serializing the message.
+    /// Always prefer [`Room::announce`] if possible.
     pub fn send<T: Serialize>(&self, msg: &T) {
         self.send_str(&serde_json::to_string(msg).expect("failed to serialize message"))
     }
@@ -277,7 +345,7 @@ impl RoomUser {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct RoomCanvas {
-    elements: Vec<element::Element>,
+    pub elements: Vec<element::Element>,
 }
 impl Default for RoomCanvas {
     fn default() -> Self {

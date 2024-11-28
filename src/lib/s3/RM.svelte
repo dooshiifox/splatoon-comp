@@ -22,7 +22,7 @@
 		><linearGradient id="rm-a"
 			><stop offset="0" stop-color="#ff0" /><stop offset="1" stop-color="#cca000" /></linearGradient
 		><linearGradient
-			xlink:href="#a"
+			xlink:href="#rm-a"
 			id="rm-e"
 			x1="9.7"
 			x2="9.7"
@@ -30,7 +30,7 @@
 			y2="20.3"
 			gradientUnits="userSpaceOnUse"
 		/><linearGradient
-			xlink:href="#a"
+			xlink:href="#rm-a"
 			id="rm-f"
 			x1="4.1"
 			x2="4.1"
@@ -38,7 +38,7 @@
 			y2="21.4"
 			gradientUnits="userSpaceOnUse"
 		/><linearGradient
-			xlink:href="#a"
+			xlink:href="#rm-a"
 			id="rm-g"
 			x1="10.2"
 			x2="10.2"
@@ -48,7 +48,7 @@
 		/><linearGradient id="rm-b"
 			><stop offset="0" stop-color="#ff0" /><stop offset="1" stop-color="#edba00" /></linearGradient
 		><linearGradient
-			xlink:href="#b"
+			xlink:href="#rm-b"
 			id="rm-h"
 			x1="8.2"
 			x2="8.2"
@@ -56,7 +56,7 @@
 			y2="30.1"
 			gradientUnits="userSpaceOnUse"
 		/><linearGradient
-			xlink:href="#b"
+			xlink:href="#rm-b"
 			id="rm-i"
 			x1="11.5"
 			x2="11.5"
@@ -77,7 +77,7 @@
 		><radialGradient id="rm-k" cx="7.7" cy="16.7" r="2.8" gradientUnits="userSpaceOnUse"
 			><stop offset="0" stop-color="#ff0" /><stop offset="1" stop-color="#f0cc00" /></radialGradient
 		><linearGradient
-			xlink:href="#a"
+			xlink:href="#rm-a"
 			id="rm-l"
 			x1="7.7"
 			x2="7.7"
@@ -85,7 +85,7 @@
 			y2="15.5"
 			gradientUnits="userSpaceOnUse"
 		/><linearGradient
-			xlink:href="#a"
+			xlink:href="#rm-a"
 			id="rm-m"
 			x1="7.8"
 			x2="7.8"

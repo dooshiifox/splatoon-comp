@@ -9,32 +9,32 @@ use super::Color;
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Element {
     /// ID of the element.
-    uuid: Uuid,
+    pub uuid: Uuid,
     /// The type of element this is, along with all the additional information
     /// that comes with it.
-    ty: ElementType,
+    pub ty: ElementType,
     /// The last user to have edited it.
-    last_edited_by: Option<Uuid>,
-    /// The editors or hosts who are currently selecting this element.
-    selected_by: Vec<Uuid>,
+    pub last_edited_by: Option<Uuid>,
+    /// The editor or host who is currently selecting this element.
+    pub selected_by: Option<Uuid>,
     /// The X position of this element.
-    x: f64,
+    pub x: f64,
     /// The Y position of this element.
-    y: f64,
+    pub y: f64,
     /// The place this elements coordinates and transforms are anchored to.
-    anchor: ElementAnchor,
+    pub anchor: ElementAnchor,
     /// How much this element is rotated, in degrees.
-    rotation: f64,
+    pub rotation: f64,
     /// The way this element scales when the editor is zoomed in or out.
     /// This causes elements not to scale at the same rate as their background.
-    scale_rate: ScaleRate,
+    pub scale_rate: ScaleRate,
     /// The z-ordering of this element, relative to other elements.
     /// Higher means further in front.
-    z_index: f64,
+    pub z_index: f64,
     /// Tags added to this element. This allows code to reference different
     /// elements with a single string, for example to make all elements
     /// on a layer invisible.
-    tags: HashSet<String>,
+    pub tags: HashSet<String>,
 }
 impl Element {
     pub fn new(el: ElementType) -> Self {
@@ -42,7 +42,7 @@ impl Element {
             uuid: Uuid::new_v4(),
             ty: el,
             last_edited_by: None,
-            selected_by: vec![],
+            selected_by: None,
             x: 0.,
             y: 0.,
             anchor: ElementAnchor::default(),

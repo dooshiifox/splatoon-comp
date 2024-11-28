@@ -5,8 +5,6 @@
 <svg
 	class={class_}
 	enable-background="new 0 0 35 35"
-	width="35"
-	height="35"
 	viewBox="0 0 35 35"
 	xmlns="http://www.w3.org/2000/svg"
 	xmlns:xlink="http://www.w3.org/1999/xlink"
@@ -30,7 +28,7 @@
 			gradientUnits="userSpaceOnUse"
 			x1="-247.0052"
 			x2="60.5887"
-			xlink:href="#c"
+			xlink:href="#cb-c"
 			y1="115.3861"
 			y2="3.4311"
 		/><linearGradient
@@ -38,7 +36,7 @@
 			gradientUnits="userSpaceOnUse"
 			x1="-247.7403"
 			x2="59.8537"
-			xlink:href="#c"
+			xlink:href="#cb-c"
 			y1="113.9912"
 			y2="2.0361"
 		/><clipPath id="cb-f"
@@ -50,7 +48,7 @@
 			gradientUnits="userSpaceOnUse"
 			x1="-141.5869"
 			x2="56.9003"
-			xlink:href="#c"
+			xlink:href="#cb-c"
 			y1="128.7739"
 			y2="56.5305"
 		/><linearGradient
@@ -58,7 +56,7 @@
 			gradientUnits="userSpaceOnUse"
 			x1="-140.2441"
 			x2="58.2431"
-			xlink:href="#c"
+			xlink:href="#cb-c"
 			y1="132.4633"
 			y2="60.2198"
 		/><linearGradient
@@ -66,7 +64,7 @@
 			gradientUnits="userSpaceOnUse"
 			x1="-138.8364"
 			x2="59.6508"
-			xlink:href="#c"
+			xlink:href="#cb-c"
 			y1="136.3308"
 			y2="64.0874"
 		/><linearGradient
@@ -74,7 +72,7 @@
 			gradientUnits="userSpaceOnUse"
 			x1="-161.1239"
 			x2="37.3633"
-			xlink:href="#c"
+			xlink:href="#cb-c"
 			y1="75.0965"
 			y2="2.8531"
 		/></defs

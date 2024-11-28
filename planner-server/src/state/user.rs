@@ -6,11 +6,11 @@ use uuid::Uuid;
 
 #[derive(Debug, Serialize)]
 pub struct User {
-    color: Color,
-    username: String,
-    canvas: u16,
-    uuid: Uuid,
-    access_level: AccessLevel,
+    pub color: Color,
+    pub username: String,
+    pub canvas: u16,
+    pub uuid: Uuid,
+    pub access_level: AccessLevel,
 }
 impl From<RoomUser> for User {
     fn from(value: RoomUser) -> Self {

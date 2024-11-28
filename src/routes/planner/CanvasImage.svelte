@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { fade } from "svelte/transition";
 	import { getEditorContext } from "./Canvas.svelte";
+	import SelectionAndMove from "./SelectionAndMove.svelte";
 
 	type Props = {
 		id: string;
@@ -9,7 +10,6 @@
 	let editor = getEditorContext();
 
 	let thisEl = $derived(editor.getElement(id, "image"));
-	let isSelected = $derived(editor.isElementSelected(id));
 
 	let imgWidth = $state(0);
 	let imgHeight = $state(0);
@@ -28,11 +28,7 @@
 </script>
 
 <div
-	class="contain-[size_layout] absolute {isSelected
-		? 'ring-[length:2px/var(--editor-zoom)] ring-blue-500'
-		: editor.isElementSelectable(thisEl)
-			? 'ring-blue-500 hover:ring-[length:2px/var(--editor-zoom)]'
-			: ''}"
+	class="contain-[size_layout] absolute"
 	style:top="{thisEl.y}px"
 	style:left="{thisEl.x}px"
 	style:--editor-zoom={editor.zoom.animated * editor.getScale(id)}
@@ -42,6 +38,8 @@
 	style:height="{imgHeight}px"
 	data-id={id}
 >
+	<SelectionAndMove {id} />
+
 	{#key thisEl.ty.url}
 		<img
 			alt=""

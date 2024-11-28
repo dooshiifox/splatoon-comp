@@ -2,6 +2,7 @@
 	import { untrack } from "svelte";
 	import { getEditorContext } from "./Canvas.svelte";
 	import { getHighestContrast } from "$lib/apca";
+	import SelectionAndMove from "./SelectionAndMove.svelte";
 
 	type Props = {
 		id: string;
@@ -47,8 +48,7 @@
 		}
 	}
 
-	let isSelected = $derived(editor.isElementSelected(id));
-	let isEditable = $derived(editor.isOnlyElementSelected(id));
+	let isEditable = $derived(editor.isOnlyElementSelected(id) && editor.isEditable([id]));
 
 	// svelte-ignore state_referenced_locally
 	let value = $state(thisEl.ty.content);
@@ -56,11 +56,7 @@
 </script>
 
 <div
-	class="contain-[size_layout] absolute {isSelected
-		? 'ring-[length:2px/var(--editor-zoom)] ring-blue-500'
-		: editor.isElementSelectable(thisEl)
-			? 'ring-blue-500 hover:ring-[length:2px/var(--editor-zoom)]'
-			: ''}"
+	class="contain-[size_layout] absolute"
 	style:top="{thisEl.y}px"
 	style:left="{thisEl.x}px"
 	style:--editor-zoom={editor.zoom.animated * editor.getScale(id)}
@@ -70,6 +66,8 @@
 	style:height="{height + 8}px"
 	data-id={id}
 >
+	<SelectionAndMove {id} />
+
 	<textarea
 		bind:this={el}
 		class="text-shadow size-full resize-none overflow-hidden border-0 bg-transparent p-0 pl-0.5 pt-0.5 text-center align-top text-2xl outline-none !ring-0 {fontFamily}"

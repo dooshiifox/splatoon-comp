@@ -224,7 +224,15 @@ Session
 					</div>
 
 					{#if ctx.editor.room.accessLevel === "admin" && user.uuid !== ctx.editor.room.userUuid}
-						<button class="-ml-2 rounded p-0.5 text-gray-300 hover:bg-gray-600">
+						<button
+							class="-ml-2 rounded p-0.5 text-gray-300 hover:bg-gray-600"
+							onclick={() => {
+								ctx.editor?.room.changeAccessLevel(
+									user.uuid,
+									user.access_level === "edit" ? "view" : "edit"
+								);
+							}}
+						>
 							<span class="sr-only">Edit user</span>
 							<svg
 								xmlns="http://www.w3.org/2000/svg"
