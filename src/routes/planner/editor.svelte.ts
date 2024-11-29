@@ -420,14 +420,18 @@ export class Editor {
 			this.isPanning = this.isSpaceDown;
 
 			if (!this.isPanning) {
-				const id = this.locateElementFromNode(e.target as HTMLElement);
+				const target = e.target as HTMLElement;
+				const id = this.locateElementFromNode(target);
 				if (id === null) {
 					if (!e.ctrlKey) {
 						this.deselectAllElements();
 					}
 					return;
 				}
-				if (this.isElementSelected(id)) {
+				const el = this.getElement(id);
+				if (!el) return;
+
+				if (el.ty.type === "text" && !target.dataset["move"] && this.isElementSelected(id)) {
 					if (!this.isOnlyElementSelected(id)) {
 						this.mayBeDraggingSelectedElements = !e.ctrlKey;
 					}
