@@ -23,6 +23,7 @@
 	import { fade, slide } from "svelte/transition";
 	import { getPlannerContext } from "./+page.svelte";
 	import { getHighestContrast } from "$lib/apca";
+	import { encodeCanvas } from "./locations";
 
 	let username = $state(localStorage.getItem("previous-username") ?? "");
 	let roomName = $state(localStorage.getItem("previous-room") ?? "");
@@ -52,9 +53,11 @@
 			[url, room] = roomName.split("#");
 		}
 
-		ctx.editor.room.connect(url, room, username, color.rgb, password).catch((e) => {
-			connectionError = tryString(e);
-		});
+		ctx.editor.room
+			.connect(url, room, username, color.rgb, password, encodeCanvas(ctx.map.map, ctx.map.mode))
+			.catch((e) => {
+				connectionError = tryString(e);
+			});
 	}
 </script>
 

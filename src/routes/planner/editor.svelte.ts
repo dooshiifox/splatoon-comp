@@ -924,6 +924,23 @@ export class RoomCollab {
 	get accessLevel() {
 		return this.user.access_level;
 	}
+	get canvas() {
+		return this.user.canvas;
+	}
+	isSwitchingCanvas = $state(false);
+
+	async setCanvas(canvas: number) {
+		this.users = this.users.map((u) => {
+			if (u.uuid === this.userUuid) {
+				return { ...u, canvas };
+			}
+			return u;
+		});
+		// await this.send({
+		// 	type: "switch_canvas",
+		// 	canvas
+		// });
+	}
 	users = $state<Array<User>>([DEFAULT_USER]);
 	getUser(userId: string) {
 		return this.users.find(({ uuid }) => userId === uuid);
@@ -931,7 +948,14 @@ export class RoomCollab {
 
 	constructor(private editor: Editor) {}
 
-	async connect(url: string, room: string, username: string, color?: string, password?: string) {
+	async connect(
+		url: string,
+		room: string,
+		username: string,
+		color?: string | undefined,
+		password?: string | undefined,
+		canvas?: number | undefined
+	) {
 		if (this.isConnectionOpen()) {
 			await this.disconnect();
 		}
@@ -946,6 +970,9 @@ export class RoomCollab {
 		}
 		if (password) {
 			p.password = password;
+		}
+		if (canvas !== undefined) {
+			p.canvas = canvas.toString();
 		}
 
 		try {
@@ -1185,7 +1212,15 @@ export class RoomCollab {
 	onJoin(msg: v.InferOutput<typeof vMsgOnJoin>) {
 		this.userUuid = msg.user.uuid;
 		this.users = msg.users;
-		this.editor.elements = Object.fromEntries(msg.elements.map((el) => [el.uuid, el]));
+		for (const [id, el] of Object.entries(this.editor.elements)) {
+			// Delete all elements not marked as NO_SYNC
+			if (!el.tags.has(NO_SYNC_TAG)) {
+				delete this.editor.elements[id];
+			}
+		}
+		for (const el of msg.elements) {
+			this.editor.elements[el.uuid] = el;
+		}
 	}
 	userJoined(user: User) {
 		this.users.push(user);

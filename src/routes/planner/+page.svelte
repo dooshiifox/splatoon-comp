@@ -1,62 +1,32 @@
 <script module lang="ts">
-	function getCurrentSelected() {
-		const params = queryParameters({
-			map: {
-				encode(value) {
-					return isMapName(value) ? value : "ScorchGorge";
-				},
-				decode(value) {
-					return isMapName(value) ? value : "ScorchGorge";
-				},
-				defaultValue: "ScorchGorge"
-			},
-			mode: {
-				encode(value) {
-					return isGamemode(value) ? value : "TW";
-				},
-				decode(value) {
-					return isGamemode(value) ? value : "TW";
-				},
-				defaultValue: "TW"
-			},
-			view: {
-				encode(value) {
-					return value === "mini" ? "mini" : "over";
-				},
-				decode(value) {
-					return value === "mini" ? "mini" : "over";
-				},
-				defaultValue: "over"
-			}
-		});
-
-		let currentMap = $derived(isMapName(params.map) ? params.map : "ScorchGorge");
-		let currentMode = $derived(isGamemode(params.mode) ? params.mode : "TW");
+	function getCurrentSelected(e: { readonly editor: TEditor | undefined }) {
+		let isMinimap = $state(false);
+		let current = $derived(decodeCanvas(e.editor?.room.canvas ?? 0));
 
 		return {
 			get map() {
-				return currentMap;
+				return current.stage;
 			},
 			set map(map: MapName) {
-				params.map = map;
+				e.editor?.room.setCanvas(encodeCanvas(map, current.gamemode));
 			},
 			get mapInfo() {
-				return LOCATIONS[currentMap];
+				return LOCATIONS[current.stage];
 			},
 			get mode() {
-				return currentMode;
+				return current.gamemode;
 			},
 			set mode(mode: Gamemode) {
-				params.mode = mode;
+				e.editor?.room.setCanvas(encodeCanvas(current.stage, mode));
 			},
 			get modeLocations(): Array<Location> {
-				return LOCATIONS[currentMap].gamemodes[currentMode];
+				return LOCATIONS[current.stage].gamemodes[current.gamemode];
 			},
 			get isMinimap() {
-				return params.view === "mini";
+				return isMinimap;
 			},
-			set isMinimap(isMinimap: boolean) {
-				params.view = isMinimap ? "mini" : "over";
+			set isMinimap(isMinimap_: boolean) {
+				isMinimap = isMinimap_;
 			}
 		};
 	}
@@ -117,15 +87,15 @@
 <script lang="ts">
 	import Editor from "./Editor.svelte";
 	import {
-		isGamemode,
 		type Gamemode,
 		type MapName,
-		isMapName,
 		getStageImage,
 		LOCATIONS,
 		type Transform,
 		type Location,
-		locationCommandPalette
+		locationCommandPalette,
+		encodeCanvas,
+		decodeCanvas
 	} from "./locations";
 	import { LOCKED_TAG, NO_SYNC_TAG, type Editor as TEditor } from "./editor.svelte";
 	import { untrack } from "svelte";
@@ -135,7 +105,6 @@
 	import CommandPalette from "./CommandPalette.svelte";
 	import { strAfter, strStartsWith } from "$lib";
 	import { unreachable } from "albtc";
-	import { queryParameters } from "sveltekit-search-params";
 	import PageTabs from "./PageTabs.svelte";
 	import { createContext } from "$lib/context";
 	import { Color } from "$lib/color.svelte";
@@ -143,8 +112,13 @@
 
 	let editor = $state<TEditor>();
 	let backgroundId: string;
-	const current = getCurrentSelected();
+	const current = getCurrentSelected({
+		get editor() {
+			return editor;
+		}
+	});
 	let image = $derived(getStageImage(current.mapInfo.id, current.mode, current.isMinimap));
+
 	plannerContext.set({
 		get editor() {
 			return editor;
@@ -152,6 +126,11 @@
 		get map() {
 			return current;
 		}
+	});
+	$effect(() => {
+		// @ts-expect-error this is for debugging purposes only.
+		// adding proper types would encourage using it in code which we *do not want*
+		window.editor = getPlannerContext();
 	});
 
 	$effect(() => {

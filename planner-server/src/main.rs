@@ -351,6 +351,10 @@ async fn handle_request(
                     None => Color::get_random_color(),
                 };
 
+                let canvas = params
+                    .remove("canvas")
+                    .and_then(|canvas| canvas.parse::<u16>().ok());
+
                 // Because the `app.read().unwrap()` holds a read guard, we can't
                 // just run `JoinError::<x>.respond_on_websocket().await`,
                 // as the read guard can't be held across the `.await`
@@ -376,7 +380,7 @@ async fn handle_request(
                     password,
                     username,
                     color,
-                    canvas: None,
+                    canvas,
                 };
 
                 handle_connection(app, user, socket.await, addr).await;

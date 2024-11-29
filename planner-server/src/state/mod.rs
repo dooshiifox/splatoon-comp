@@ -122,12 +122,13 @@ impl Room {
     /// Adds a user to the room.
     pub fn add_user(&mut self, user: RoomUser) {
         trace!(
-            "User `{}` [{}] [{}] [{}] joined `{}` with {} perms",
+            "User `{}` [{}] [{}] [{}] joined `{}` [{}] with {} perms",
             user.username,
             user.uuid,
             user.addr,
             user.color,
             self.name,
+            user.canvas,
             user.access_level
         );
         self.announce_to_all(

@@ -2355,6 +2355,22 @@ export function isMapName(t: unknown): t is MapName {
 	return typeof t === "string" && t in LOCATIONS;
 }
 
+export function encodeCanvas(stage: MapName | number, gamemode: Gamemode): number {
+	if (typeof stage === "string") {
+		stage = LOCATIONS[stage].id;
+	}
+	const gamemodeId = GAMEMODES.indexOf(gamemode);
+	return (stage << 3) | gamemodeId;
+}
+export function decodeCanvas(canvas: number): { stage: MapName; gamemode: Gamemode } {
+	const stageId = canvas >> 3;
+	const gamemodeId = canvas & 0b111;
+	const gamemode = GAMEMODES[gamemodeId] ?? "TW";
+	const stage = (Object.entries(LOCATIONS).find(([, { id }]) => id === stageId)?.[0] ??
+		"ScorchGorge") as MapName;
+	return { stage, gamemode };
+}
+
 // Make sure each alias is unique
 const aliases = new Set<string>([
 	// These are commonly used, make sure they arent reused accidentally.
