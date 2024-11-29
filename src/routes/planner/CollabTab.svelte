@@ -24,6 +24,7 @@
 	import { getPlannerContext } from "./+page.svelte";
 	import { getHighestContrast } from "$lib/apca";
 	import { encodeCanvas } from "./locations";
+	import { dev } from "$app/environment";
 
 	let username = $state(localStorage.getItem("previous-username") ?? "");
 	let roomName = $state(localStorage.getItem("previous-room") ?? "");
@@ -35,6 +36,14 @@
 	let ctx = getPlannerContext();
 
 	let connectionError = $state();
+	function decodeUrlRoom(roomName: string): { url: string; room: string } {
+		let url = dev ? "ws://localhost:10999" : "wss://s3-websocket.dooshii.dev";
+		let room = roomName;
+		if (roomName.startsWith("wss://") && roomName.includes("#")) {
+			[url, room] = roomName.split("#");
+		}
+		return { url, room };
+	}
 	function connect() {
 		if (ctx.editor === undefined) return;
 
@@ -43,15 +52,11 @@
 		localStorage.setItem("previous-room", roomName);
 		localStorage.setItem("previous-color", color.rgb);
 
-		let url = "ws://localhost:10999";
-		let room = roomName;
 		// Allow users to specify custom URLs with the format `<websocket-url>#<room-name>`
 		// Make sure the user is targeting a URL with the `wss://` check though
 		// No point checking for `ws://` because browser's can't connect to
 		// unsecure websockets.
-		if (roomName.startsWith("wss://") && roomName.includes("#")) {
-			[url, room] = roomName.split("#");
-		}
+		const { url, room } = decodeUrlRoom(roomName);
 
 		ctx.editor.room
 			.connect(url, room, username, color.rgb, password, encodeCanvas(ctx.map.map, ctx.map.mode))
@@ -112,9 +117,12 @@
 		{/if}
 
 		{#if ctx.editor.room.connectionState === "connecting"}
-			<div class="absolute inset-0 bg-white/50 md:rounded-b-xl" transition:fade={{ duration: 200 }}>
+			<div
+				class="absolute inset-0 grid place-items-center bg-white/25 md:rounded-b-xl"
+				transition:fade={{ duration: 200 }}
+			>
 				<svg
-					class="h-5 w-5 animate-spin text-white"
+					class="size-8 animate-spin text-white"
 					xmlns="http://www.w3.org/2000/svg"
 					fill="none"
 					viewBox="0 0 24 24"
@@ -159,7 +167,7 @@ Session
 			</svg>
 
 			<p class="text-center">
-				{roomName}
+				{decodeUrlRoom(roomName).room}
 			</p>
 		</div>
 

@@ -14,3 +14,25 @@ Of course, the solution of 'have us process everything' leads to performance con
 - Privacy concerns.... uhhh deal with it. There's not much more that can be said or done, unless you choose to self-host. Really anyone who cares about privacy on a canvas editor is doing some odd things with it, and is probably the type to _know_ how to self-host.
 
 So now we've established how it should work. Centralised server, users create and join rooms.
+
+### Deployment
+
+If you want to deploy your own server, this is how I did it using DigitalOcean
+
+- Create a droplet with at least 1GB memory
+- SSH into it
+
+```
+$ sudo apt update
+$ sudo apt install build-essential
+$ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+$ . "$HOME/.cargo/env"
+$ rustup uninstall stable
+$ rustup install nightly
+$ rustup default nightly
+$ git clone https://github.com/dooshiifox/splatoon-comp
+$ cd splatoon-comp/planner-server
+$ cargo run --release -- [ip-address]:80 -vvv
+```
+
+Then using Cloudflare as your DNS, add a new A record pointing to the IP address. You can then connect to it on the main website by specifying the room name as `wss://[your domain]#[the room name]`. For example, `wss://s3-websocket.dooshii.dev#test` will join the room `test` whilst connecting to `wss://s3-websocket.dooshii.dev` (which is the default URL, btw).

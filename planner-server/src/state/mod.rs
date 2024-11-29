@@ -50,6 +50,14 @@ impl App {
             false
         }
     }
+    /// Sends a `ping` to all connected sockets.
+    pub fn send_pings(&self) {
+        for room in self.rooms.values() {
+            for user in &room.users {
+                user.ping();
+            }
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -364,6 +372,14 @@ impl RoomUser {
             .tx
             .unbounded_send(Message::text(msg))
             .inspect_err(|e| warn!("Failed to send to user: {e:#?}"));
+    }
+
+    /// Sends a `ping` to a user.
+    fn ping(&self) {
+        let _ = self
+            .tx
+            .unbounded_send(Message::Ping(vec![]))
+            .inspect_err(|e| warn!("Failed to ping user: {e:#?}"));
     }
 }
 

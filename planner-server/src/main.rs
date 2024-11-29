@@ -6,6 +6,7 @@ use std::{
     convert::Infallible,
     net::{IpAddr, Ipv4Addr, SocketAddr},
     sync::{Arc, RwLock},
+    time::Duration,
 };
 
 use clap::Parser;
@@ -21,7 +22,7 @@ use hyper::{
 use hyper_util::rt::TokioIo;
 use serde::Serialize;
 use state::{user::AccessLevel, App, Color, RoomUser};
-use tokio::net::TcpListener;
+use tokio::{net::TcpListener, time};
 use tokio_tungstenite::tungstenite::{
     protocol::{frame::coding::CloseCode, CloseFrame},
     Message,
@@ -421,6 +422,18 @@ async fn main() {
     info!("Hosting server on ws://{addr}");
 
     let app: AppState = Arc::new(RwLock::new(App::new()));
+
+    // Some connections auto-close the websocket after 30s-2m of receiving no data.
+    // I believe Cloudflare does this. To prevent this, ping the client every
+    // so often.
+    let app_pinger = app.clone();
+    tokio::spawn(async move {
+        let mut interval = time::interval(Duration::from_secs(45));
+        loop {
+            interval.tick().await;
+            app_pinger.read().unwrap().send_pings();
+        }
+    });
 
     loop {
         let (stream, remote_addr) = listener.accept().await.expect("Failed to accept request.");
