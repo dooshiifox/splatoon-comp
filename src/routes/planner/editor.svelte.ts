@@ -131,16 +131,22 @@ const vMsgSelectionResponse = v.object({
 	newly_deselected: v.array(vUuid),
 	failed_to_select: v.array(vUuid)
 });
+const vMsgCanvasResponse = v.object({
+	type: v.literal("canvas_response"),
+	canvas: v.number(),
+	elements: v.array(vElement)
+});
 const vMsg = v.variant("type", [
 	vMsgJoin,
 	vMsgOnJoin,
 	vMsgDisconnect,
 	vMsgUserChange,
 	vMsgSelection,
-	vMsgSelectionResponse
+	vMsgSelectionResponse,
+	vMsgCanvasResponse
 ]);
 
-type Command = { id?: string } & (SelectCommand | AccessLevelAdjustmentCommand);
+type Command = { id?: string } & (SelectCommand | AccessLevelAdjustmentCommand | CanvasCommand);
 type SelectCommand = {
 	type: "selection";
 	elements: Array<string>;
@@ -149,6 +155,10 @@ type AccessLevelAdjustmentCommand = {
 	type: "access_level_adjustment";
 	user: string;
 	access_level: AccessLevel;
+};
+type CanvasCommand = {
+	type: "canvas";
+	canvas: number;
 };
 const commandResponse = {
 	selection(_) {
@@ -164,6 +174,14 @@ const commandResponse = {
 			data: vMsgUserChange,
 			error: v.object({
 				code: v.picklist(["no_permission", "room_does_not_exist", "user_does_not_exist"])
+			})
+		};
+	},
+	canvas(_) {
+		return {
+			data: vMsgCanvasResponse,
+			error: v.object({
+				code: v.picklist(["room_does_not_exist"])
 			})
 		};
 	}
@@ -931,19 +949,26 @@ export class RoomCollab {
 	get canvas() {
 		return this.user.canvas;
 	}
-	isSwitchingCanvas = $state(false);
+	#isSwitchingCanvas = $state<false | number>(false);
+	get isSwitchingCanvas() {
+		return this.#isSwitchingCanvas !== false;
+	}
 
 	async setCanvas(canvas: number) {
-		this.users = this.users.map((u) => {
-			if (u.uuid === this.userUuid) {
-				return { ...u, canvas };
-			}
-			return u;
-		});
-		// await this.send({
-		// 	type: "switch_canvas",
-		// 	canvas
-		// });
+		if (this.isConnectionOpen()) {
+			this.#isSwitchingCanvas = canvas;
+			await this.send({
+				type: "canvas",
+				canvas
+			});
+		} else {
+			this.users = this.users.map((u) => {
+				if (u.uuid === this.userUuid) {
+					return { ...u, canvas };
+				}
+				return u;
+			});
+		}
 	}
 	users = $state<Array<User>>([DEFAULT_USER]);
 	getUser(userId: string) {
@@ -1215,6 +1240,8 @@ export class RoomCollab {
 			this.userChanged(msg.user);
 		} else if (msg.type === "selection" || msg.type === "selection_response") {
 			this.onUsersSelection(msg);
+		} else if (msg.type === "canvas_response") {
+			this.onCanvasResponse(msg);
 		} else {
 			unreachable(msg);
 		}
@@ -1280,6 +1307,31 @@ export class RoomCollab {
 				this.editor.selected.delete(id);
 			}
 		}
+	}
+	onCanvasResponse(msg: v.InferOutput<typeof vMsgCanvasResponse>) {
+		// User switched canvas a second time before the data from this one
+		// was loaded.
+		if (this.#isSwitchingCanvas !== msg.canvas) {
+			return;
+		}
+
+		this.users = this.users.map((u) => {
+			if (u.uuid === this.userUuid) {
+				return { ...u, canvas: msg.canvas };
+			}
+			return u;
+		});
+		for (const [id, el] of Object.entries(this.editor.elements)) {
+			// Delete all elements not marked as NO_SYNC
+			if (!el.tags.has(NO_SYNC_TAG)) {
+				delete this.editor.elements[id];
+			}
+		}
+		// Add all new elements
+		for (const el of msg.elements) {
+			this.editor.elements[el.uuid] = el;
+		}
+		this.#isSwitchingCanvas = false;
 	}
 
 	/** Sends a command to the server.

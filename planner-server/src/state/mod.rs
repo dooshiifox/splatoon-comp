@@ -100,6 +100,9 @@ impl Room {
     pub fn get_or_create_canvas(&mut self, id: u16) -> &mut RoomCanvas {
         self.canvases.entry(id).or_default()
     }
+    pub fn get_canvas(&self, id: u16) -> Option<&RoomCanvas> {
+        self.canvases.get(&id)
+    }
 
     /// Retrieves a user.
     pub fn get_user(&self, user: Uuid) -> Option<&RoomUser> {
@@ -112,6 +115,10 @@ impl Room {
     /// Retrieves a user from their socket address.
     pub fn get_user_from_addr(&self, user: SocketAddr) -> Option<&RoomUser> {
         self.users.iter().find(|u| u.addr == user)
+    }
+    /// Retrieves a user mutably from their socket address.
+    pub fn get_user_from_addr_mut(&mut self, user: SocketAddr) -> Option<&mut RoomUser> {
+        self.users.iter_mut().find(|u| u.addr == user)
     }
     /// Returns the current admin of the room
     pub fn get_admin(&self) -> Option<&RoomUser> {
@@ -307,6 +314,22 @@ impl Room {
         }
 
         true
+    }
+
+    pub fn switch_canvas(&mut self, addr: SocketAddr, canvas: u16) -> Option<()> {
+        let user = self.get_user_from_addr_mut(addr)?;
+        user.canvas = canvas;
+        let uuid = user.uuid;
+
+        // Deselect all elements from this user.
+        let canvas = self.get_or_create_canvas(canvas);
+        for el in &mut canvas.elements {
+            if el.selected_by.is_some_and(|u| u == uuid) {
+                el.selected_by = None
+            }
+        }
+
+        Some(())
     }
 
     pub fn save_to_file(&self) {}

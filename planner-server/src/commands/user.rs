@@ -1,8 +1,13 @@
-use crate::state::user::AccessLevel;
+use std::{
+    net::SocketAddr,
+    sync::{Arc, RwLock},
+};
+
+use crate::state::{user::AccessLevel, App};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::{AnnounceTo, ErrorType, ProcessReceive};
+use super::{AnnounceTo, AnnounceType, ErrorType, ProcessReceive};
 
 #[derive(Deserialize)]
 pub struct ReceiveAccessLevelAdjustment {
@@ -12,9 +17,9 @@ pub struct ReceiveAccessLevelAdjustment {
 impl ProcessReceive for ReceiveAccessLevelAdjustment {
     fn process(
         self,
-        app: std::sync::Arc<std::sync::RwLock<crate::state::App>>,
+        app: Arc<RwLock<App>>,
         room_name: &str,
-        addr: std::net::SocketAddr,
+        addr: SocketAddr,
     ) -> Result<AnnounceTo, ErrorType> {
         let mut app_write_lock = app.write().unwrap();
         let Some(room) = app_write_lock.get_room_mut(room_name) else {
@@ -44,4 +49,49 @@ pub enum UserChangeError {
     RoomDoesNotExist,
     NoPermission,
     UserDoesNotExist,
+}
+
+#[derive(Deserialize)]
+pub struct ReceiveCanvas {
+    canvas: u16,
+}
+impl ProcessReceive for ReceiveCanvas {
+    fn process(
+        self,
+        app: Arc<RwLock<App>>,
+        room_name: &str,
+        addr: SocketAddr,
+    ) -> Result<AnnounceTo, ErrorType> {
+        {
+            let mut app_write_lock = app.write().unwrap();
+            let Some(room) = app_write_lock.get_room_mut(room_name) else {
+                return UserChangeError::RoomDoesNotExist.into();
+            };
+            room.switch_canvas(addr, self.canvas);
+        }
+        let elements;
+        let respond_user;
+        {
+            let app_read_lock = app.read().unwrap();
+            let Some(room) = app_read_lock.get_room(room_name) else {
+                return UserChangeError::RoomDoesNotExist.into();
+            };
+            let Some(user) = room.get_user_from_addr(addr) else {
+                return UserChangeError::RoomDoesNotExist.into();
+            };
+            respond_user = user.clone();
+            // Canvas was created in `switch_canvas`
+            elements = room.get_canvas(self.canvas).unwrap().elements.clone();
+        }
+
+        Ok(AnnounceTo::ResponseAndAnnounce {
+            respond: AnnounceType::CanvasResponse {
+                canvas: self.canvas,
+                elements,
+            },
+            announce: AnnounceType::UserChange {
+                user: respond_user.into(),
+            },
+        })
+    }
 }

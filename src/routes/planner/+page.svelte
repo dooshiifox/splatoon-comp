@@ -3,12 +3,31 @@
 		let isMinimap = $state(false);
 		let current = $derived(decodeCanvas(e.editor?.room.canvas ?? 0));
 
+		// Normally the idea of using effects is terrible and unnecessary,
+		// however here since we have two pieces of state that can be updated
+		// seperately or at the same time, an effect that batches the 'at the
+		// same time' case is very useful.
+		// Without this, we need our own solution for batching updates in case
+		// both `current.map` and `current.mode` are updated at the same time.
+		let map = $state<null | MapName>(null);
+		let mode = $state<null | Gamemode>(null);
+		$effect(() => {
+			const switchTo = encodeCanvas(map ?? current.stage, mode ?? current.gamemode);
+			untrack(() => {
+				if (switchTo !== e.editor?.room.canvas) {
+					e.editor?.room.setCanvas(switchTo);
+					map = null;
+					mode = null;
+				}
+			});
+		});
+
 		return {
 			get map() {
 				return current.stage;
 			},
-			set map(map: MapName) {
-				e.editor?.room.setCanvas(encodeCanvas(map, current.gamemode));
+			set map(map_: MapName) {
+				map = map_;
 			},
 			get mapInfo() {
 				return LOCATIONS[current.stage];
@@ -16,8 +35,8 @@
 			get mode() {
 				return current.gamemode;
 			},
-			set mode(mode: Gamemode) {
-				e.editor?.room.setCanvas(encodeCanvas(current.stage, mode));
+			set mode(mode_: Gamemode) {
+				mode = mode_;
 			},
 			get modeLocations(): Array<Location> {
 				return LOCATIONS[current.stage].gamemodes[current.gamemode];

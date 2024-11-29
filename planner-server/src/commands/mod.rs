@@ -21,6 +21,7 @@ pub struct ReceiveData {
 pub enum ReceiveType {
     AccessLevelAdjustment(user::ReceiveAccessLevelAdjustment),
     Selection(selection::Receive),
+    Canvas(user::ReceiveCanvas),
 }
 
 impl ReceiveData {
@@ -28,6 +29,7 @@ impl ReceiveData {
         let response = match self.receive {
             ReceiveType::AccessLevelAdjustment(r) => r.process(app.clone(), room_name, addr),
             ReceiveType::Selection(r) => r.process(app.clone(), room_name, addr),
+            ReceiveType::Canvas(r) => r.process(app.clone(), room_name, addr),
         };
         app.read()
             .unwrap()
@@ -95,6 +97,10 @@ pub enum AnnounceType {
         newly_selected: Vec<Uuid>,
         newly_deselected: Vec<Uuid>,
         failed_to_select: Vec<Uuid>,
+    },
+    CanvasResponse {
+        canvas: u16,
+        elements: Vec<Element>,
     },
 }
 impl AnnounceType {
