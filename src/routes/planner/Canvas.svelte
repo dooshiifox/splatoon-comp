@@ -12,6 +12,7 @@
 	import { Editor, RENDER_TOUCH_POINTS } from "./editor.svelte";
 	import { dev } from "$app/environment";
 	import { createContext } from "$lib/context";
+	import { fade } from "svelte/transition";
 
 	type Props = {
 		onCreate?: (editor: Editor) => void;
@@ -80,6 +81,12 @@
 			{/if}
 		{/each}
 	</div>
+
+	{#if editor.room.isSwitchingCanvas}
+		<div class="absolute inset-0 grid place-items-center bg-black/50" out:fade={{ duration: 50 }}>
+			<p class="text-4xl font-bold text-white">Loading canvas...</p>
+		</div>
+	{/if}
 
 	{#if dev && RENDER_TOUCH_POINTS}
 		{#each editor.touchPoints.points as [, touchPoint] (touchPoint.identifier)}
