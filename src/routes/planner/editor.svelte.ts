@@ -1166,8 +1166,14 @@ export class RoomCollab {
 	onDisconnect(e: CloseEvent) {
 		this.connectionState = "closed";
 		this.conn = undefined;
-		this.userUuid = DEFAULT_UUID;
-		this.users = [DEFAULT_USER];
+		this.users = this.users.filter((u) => u.uuid === this.userUuid);
+
+		for (const id in this.editor.elements) {
+			if (this.editor.elements[id].selected_by !== this.userUuid) {
+				this.editor.elements[id].selected_by = null;
+			}
+			this.editor.elements[id].last_edited_by = null;
+		}
 
 		// Call all close event listeners
 		this.awaitCloseCallbacks.forEach((cb) => cb(e));
@@ -1315,6 +1321,8 @@ export class RoomCollab {
 		}
 	}
 	async onSelectedElementsChange(elementIds: Array<string>) {
+		if (!this.isConnectionOpen()) return;
+
 		const selection = await this.send({
 			id: uuid(),
 			type: "selection",

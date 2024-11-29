@@ -57,6 +57,7 @@
 
 <div
 	class="contain-[size_layout] absolute"
+	class:pointer-events-none={!editor.isElementSelectable(id)}
 	style:top="{thisEl.y}px"
 	style:left="{thisEl.x}px"
 	style:--editor-zoom={editor.zoom.animated * editor.getScale(id)}
