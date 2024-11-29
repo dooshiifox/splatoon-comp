@@ -32,7 +32,19 @@ $ rustup install nightly
 $ rustup default nightly
 $ git clone https://github.com/dooshiifox/splatoon-comp
 $ cd splatoon-comp/planner-server
-$ cargo run --release -- [ip-address]:80 -vvv
+$ cargo build --release
+$ vim /etc/systemd/system/planner.service
+[Unit]
+Description=Splatoon 3 Planner websockets
+
+[Service]
+Restart=always
+ExecStart=/root/splatoon-comp/planner-server/target/release/planner-server [ip-address]:80 -vvv
+
+[Install]
+WantedBy=multi-user.target
+$ systemctl enable planner.service
+$ systemctl start planner.service
 ```
 
 Then using Cloudflare as your DNS, add a new A record pointing to the IP address. You can then connect to it on the main website by specifying the room name as `wss://[your domain]#[the room name]`. For example, `wss://s3-websocket.dooshii.dev#test` will join the room `test` whilst connecting to `wss://s3-websocket.dooshii.dev` (which is the default URL, btw).
