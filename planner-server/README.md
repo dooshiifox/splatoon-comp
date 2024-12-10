@@ -48,3 +48,14 @@ $ systemctl start planner.service
 ```
 
 Then using Cloudflare as your DNS, add a new A record pointing to the IP address. You can then connect to it on the main website by specifying the room name as `wss://[your domain]#[the room name]`. For example, `wss://s3-websocket.dooshii.dev#test` will join the room `test` whilst connecting to `wss://s3-websocket.dooshii.dev` (which is the default URL, btw).
+
+#### Updating
+
+Firstly, SSH into it. Then, run the following commands.
+
+```
+$ cd splatoon-comp/planner-server
+$ git pull
+$ cargo build --release
+$ systemctl restart planner.service
+```
