@@ -41,7 +41,7 @@
 		if (el === undefined) return;
 
 		if (el.value !== "") {
-			editor.updateElement(id, { ty: { ...thisEl.ty, content: el.value } });
+			editor.updateElements([{ uuid: id, ty: { ...thisEl.ty, content: el.value } }]);
 			editor.deselectElement(id);
 		} else {
 			editor.deleteElement(id);
@@ -52,6 +52,9 @@
 
 	// svelte-ignore state_referenced_locally
 	let value = $state(thisEl.ty.content);
+	$effect(() => {
+		value = thisEl.ty.content;
+	});
 	let textShadow = $derived(getHighestContrast(thisEl.ty.color.rgb, ["#ffffff", "#000000"]));
 </script>
 

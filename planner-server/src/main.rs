@@ -96,8 +96,8 @@ async fn handle_connection(
             // Try parse as 'Receive'
             let receive = match serde_json::from_str::<commands::ReceiveData>(text) {
                 Ok(t) => t,
-                Err(_) => {
-                    warn!("Couldn't parse message from {addr} as `Receive`: {text}");
+                Err(e) => {
+                    warn!("Couldn't parse message from {addr} as `Receive`: {text}\n\n{e:#?}");
                     return future::ok(());
                 }
             };

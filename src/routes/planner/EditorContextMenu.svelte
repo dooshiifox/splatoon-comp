@@ -10,24 +10,26 @@
 		label: "Actions",
 		onselect(value) {
 			if (value[0] === "add-text") {
-				editor.addElement({
-					ty: {
-						type: "text",
-						content: "",
-						color: Color.fromRgb("#ffffff")!,
-						font: {
-							font_type: "sans",
-							custom_font_family: "splatoon-text"
+				editor.addElements([
+					{
+						ty: {
+							type: "text",
+							content: "",
+							color: Color.fromRgb("#ffffff")!,
+							font: {
+								font_type: "sans",
+								custom_font_family: "splatoon-text"
+							},
+							align: "center",
+							size: 30,
+							background_blur: 0,
+							background_color: Color.fromRgb("#00000000")!
 						},
-						align: "center",
-						size: 30,
-						background_blur: 0,
-						background_color: Color.fromRgb("#00000000")!
-					},
-					x: editor.toCanvasSpaceX(position.x),
-					y: editor.toCanvasSpaceY(position.y),
-					tags: new SvelteSet(["items"])
-				});
+						x: editor.toCanvasSpaceX(position.x),
+						y: editor.toCanvasSpaceY(position.y),
+						tags: new SvelteSet(["items"])
+					}
+				]);
 			}
 		}
 	});

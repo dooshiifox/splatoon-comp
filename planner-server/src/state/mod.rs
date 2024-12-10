@@ -230,10 +230,16 @@ impl Room {
     ) {
         match announcement {
             Ok(AnnounceTo::All(t)) => self.announce_to_all(t, id),
+            Ok(AnnounceTo::Canvas(t, c)) => self.announce_to_canvas(c, t, id),
             Ok(AnnounceTo::Respond(t)) => self.respond_to_user(sender, t, id),
             Ok(AnnounceTo::ResponseAndAnnounce { respond, announce }) => {
                 self.respond_and_announce(announce, sender, respond, id)
             }
+            Ok(AnnounceTo::ResponseAndAnnounceToCanvas {
+                respond,
+                announce,
+                canvas,
+            }) => self.respond_and_announce_to_canvas(canvas, announce, sender, respond, id),
             Ok(AnnounceTo::None) => {}
             Err(error) => self.respond_error(sender, error, id),
         }
@@ -242,6 +248,13 @@ impl Room {
         let msg = serde_json::to_string(&CommandAnnounce { id, data })
             .expect("failed to serialize announcement");
         for user in &self.users {
+            user.send_str(&msg);
+        }
+    }
+    pub fn announce_to_canvas(&self, canvas: u16, data: AnnounceType, id: Option<Uuid>) {
+        let msg = serde_json::to_string(&CommandAnnounce { id, data })
+            .expect("failed to serialize announcement");
+        for user in self.users.iter().filter(|u| u.canvas == canvas) {
             user.send_str(&msg);
         }
     }
@@ -267,6 +280,28 @@ impl Room {
             if user.addr == sender {
                 user.send(&r_msg);
             } else {
+                user.send_str(&msg);
+            }
+        }
+    }
+    pub fn respond_and_announce_to_canvas(
+        &self,
+        canvas: u16,
+        announce: AnnounceType,
+        sender: SocketAddr,
+        respond: AnnounceType,
+        id: Option<Uuid>,
+    ) {
+        let msg = serde_json::to_string(&CommandAnnounce {
+            id: None,
+            data: announce,
+        })
+        .expect("failed to serialize announcement");
+        let r_msg = CommandAnnounce { id, data: respond };
+        for user in &self.users {
+            if user.addr == sender {
+                user.send(&r_msg);
+            } else if user.canvas == canvas {
                 user.send_str(&msg);
             }
         }
@@ -383,17 +418,22 @@ impl RoomUser {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 pub struct RoomCanvas {
     pub elements: Vec<element::Element>,
 }
-impl Default for RoomCanvas {
-    fn default() -> Self {
-        Self {
-            elements: vec![Element::new(ElementType::Text(ElementText::new(
-                "Hello, world".to_string(),
-            )))],
-        }
+impl RoomCanvas {
+    pub fn get_element(&self, uuid: &Uuid) -> Option<&element::Element> {
+        self.elements.iter().find(|el| &el.uuid == uuid)
+    }
+    pub fn get_element_mut(&mut self, uuid: &Uuid) -> Option<&mut element::Element> {
+        self.elements.iter_mut().find(|el| &el.uuid == uuid)
+    }
+    pub fn add_element(&mut self, element: Element) {
+        self.elements.push(element)
+    }
+    pub fn delete_element(&mut self, uuid: &Uuid) {
+        self.elements.retain(|el| &el.uuid != uuid);
     }
 }
 

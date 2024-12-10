@@ -6,6 +6,7 @@ use std::{
 };
 use uuid::Uuid;
 
+pub mod elements;
 pub mod join;
 pub mod selection;
 pub mod user;
@@ -22,6 +23,7 @@ pub enum ReceiveType {
     AccessLevelAdjustment(user::ReceiveAccessLevelAdjustment),
     Selection(selection::Receive),
     Canvas(user::ReceiveCanvas),
+    ChangedElements(elements::Receive),
 }
 
 impl ReceiveData {
@@ -30,6 +32,7 @@ impl ReceiveData {
             ReceiveType::AccessLevelAdjustment(r) => r.process(app.clone(), room_name, addr),
             ReceiveType::Selection(r) => r.process(app.clone(), room_name, addr),
             ReceiveType::Canvas(r) => r.process(app.clone(), room_name, addr),
+            ReceiveType::ChangedElements(r) => r.process(app.clone(), room_name, addr),
         };
         app.read()
             .unwrap()
@@ -50,6 +53,8 @@ trait ProcessReceive {
 pub enum AnnounceTo {
     /// Send an announcement with all the data to all users.
     All(AnnounceType),
+    /// Send an announcement with all the data to all users on a canvas.
+    Canvas(AnnounceType, u16),
     /// Respond to the user who sent the message.
     Respond(AnnounceType),
     /// Respond to the user with one message type, and announce to all other
@@ -57,6 +62,13 @@ pub enum AnnounceTo {
     ResponseAndAnnounce {
         respond: AnnounceType,
         announce: AnnounceType,
+    },
+    /// Respond to the user with one message type, and announce to all other
+    /// users on a canvas with a different message type.
+    ResponseAndAnnounceToCanvas {
+        respond: AnnounceType,
+        announce: AnnounceType,
+        canvas: u16,
     },
     /// Doesn't send any announcement.
     None,
@@ -102,11 +114,20 @@ pub enum AnnounceType {
         canvas: u16,
         elements: Vec<Element>,
     },
+    ElementsChanged {
+        elements: Vec<Element>,
+        deleted_elements: Vec<Uuid>,
+    },
 }
 impl AnnounceType {
     /// Announces this to all users.
     pub fn announce_to_all(self) -> AnnounceTo {
         AnnounceTo::All(self)
+    }
+
+    /// Announces this to all users on a canvas.
+    pub fn announce_to_canvas(self, canvas: u16) -> AnnounceTo {
+        AnnounceTo::Canvas(self, canvas)
     }
 
     /// Responds to a user with this data.
@@ -120,6 +141,12 @@ impl AnnounceType {
 pub enum ErrorType {
     Selection(selection::Error),
     UserChange(user::UserChangeError),
+    ChangedElements(elements::Error),
+}
+impl<T> From<elements::Error> for Result<T, ErrorType> {
+    fn from(value: elements::Error) -> Self {
+        Err(ErrorType::ChangedElements(value))
+    }
 }
 impl<T> From<selection::Error> for Result<T, ErrorType> {
     fn from(value: selection::Error) -> Self {

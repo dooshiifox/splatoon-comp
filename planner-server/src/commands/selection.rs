@@ -22,6 +22,7 @@ impl ProcessReceive for Receive {
         let mut newly_deselected = vec![];
         let mut failed_to_select = vec![];
         let uuid;
+        let canvas_id;
 
         {
             let mut app_write_lock = app.write().unwrap();
@@ -38,6 +39,7 @@ impl ProcessReceive for Receive {
                 return Error::NoPermission.into();
             }
             uuid = user.uuid;
+            canvas_id = user.canvas;
 
             // Change the selected elements
             let canvas = room.get_or_create_canvas(user.canvas);
@@ -59,7 +61,7 @@ impl ProcessReceive for Receive {
             }
         }
 
-        Ok(AnnounceTo::ResponseAndAnnounce {
+        Ok(AnnounceTo::ResponseAndAnnounceToCanvas {
             respond: AnnounceType::SelectionResponse {
                 user_uuid: uuid,
                 newly_selected: newly_selected.clone(),
@@ -71,6 +73,7 @@ impl ProcessReceive for Receive {
                 newly_selected,
                 newly_deselected,
             },
+            canvas: canvas_id,
         })
     }
 }

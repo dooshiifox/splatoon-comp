@@ -116,7 +116,12 @@
 		encodeCanvas,
 		decodeCanvas
 	} from "./locations";
-	import { LOCKED_TAG, NO_SYNC_TAG, type Editor as TEditor } from "./editor.svelte";
+	import {
+		LOCKED_TAG,
+		NO_SYNC_TAG,
+		type PartialElement,
+		type Editor as TEditor
+	} from "./editor.svelte";
 	import { untrack } from "svelte";
 	import { SvelteSet } from "svelte/reactivity";
 	import { applyBehaviors } from "$lib/headlessui/internal/behavior.svelte";
@@ -158,12 +163,18 @@
 		untrack(() => {
 			if (editor === undefined) return;
 			const img = editor.getElement(backgroundId, "image");
-			editor.updateElement(backgroundId, {
-				ty: {
-					...img.ty,
-					url: image
-				}
-			});
+			editor.updateElements(
+				[
+					{
+						uuid: backgroundId,
+						ty: {
+							...img.ty,
+							url: image
+						}
+					}
+				],
+				false
+			);
 		});
 	});
 
@@ -181,10 +192,16 @@
 		const newX = x * Math.cos(rotationCenter) - y * Math.sin(rotationCenter);
 		const newY = y * Math.cos(rotationCenter) + x * Math.sin(rotationCenter);
 
-		editor?.updateElement(id, {
-			x: reverse ? newX : (newX + translateX) * scale,
-			y: reverse ? newY : (newY + translateY) * scale
-		});
+		editor?.updateElements(
+			[
+				{
+					uuid: id,
+					x: reverse ? newX : (newX + translateX) * scale,
+					y: reverse ? newY : (newY + translateY) * scale
+				}
+			],
+			false
+		);
 	}
 
 	$effect(() => {
@@ -192,9 +209,10 @@
 		const mapCombo = current.map + current.mode + untrack(() => uuid());
 
 		untrack(() => {
+			const els: Array<PartialElement> = [];
 			for (const location of current.modeLocations) {
 				if (location.type === "callout") {
-					editor?.addElement({
+					els.push({
 						x: location.x,
 						y: location.y,
 						ty: {
@@ -215,12 +233,14 @@
 					});
 				}
 			}
+
+			editor?.addElements(els, false);
 		});
 
 		return () =>
 			untrack(() => {
 				for (const el of editor?.getElementsInGroup(mapCombo) ?? []) {
-					editor?.deleteElement(el.uuid);
+					editor?.deleteElement(el.uuid, false);
 				}
 			});
 	});
@@ -315,25 +335,30 @@
 	<Editor
 		onCreate={(etor) => {
 			editor = etor;
-			backgroundId = editor.addElement({
-				ty: {
-					type: "image",
-					alt: "",
-					crop: { top: 0, bottom: 0, left: 0, right: 0 },
-					outline_blur: 0,
-					outline_color: Color.fromRgb("#0000")!,
-					outline_thickness: 0,
-					scale_x: 1,
-					scale_y: 1,
-					text: [],
-					url: image
-				},
-				x: 0,
-				y: 0,
-				z_index: -100,
-				scale_rate: "none",
-				tags: new SvelteSet([LOCKED_TAG, NO_SYNC_TAG])
-			});
+			backgroundId = etor.addElements(
+				[
+					{
+						ty: {
+							type: "image",
+							alt: "",
+							crop: { top: 0, bottom: 0, left: 0, right: 0 },
+							outline_blur: 0,
+							outline_color: Color.fromRgb("#0000")!,
+							outline_thickness: 0,
+							scale_x: 1,
+							scale_y: 1,
+							text: [],
+							url: image
+						},
+						x: 0,
+						y: 0,
+						z_index: -100,
+						scale_rate: "none",
+						tags: new SvelteSet([LOCKED_TAG, NO_SYNC_TAG])
+					}
+				],
+				false
+			)[0];
 		}}
 	/>
 

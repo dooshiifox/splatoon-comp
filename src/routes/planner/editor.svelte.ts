@@ -98,7 +98,18 @@ const vElement = v.object({
 		v.transform((i) => new SvelteSet(i))
 	)
 });
-type Element = v.InferOutput<typeof vElement>;
+export type Element = v.InferOutput<typeof vElement>;
+export type PartialElement = OptionalKeys<
+	Element,
+	| "uuid"
+	| "scale_rate"
+	| "z_index"
+	| "rotation"
+	| "tags"
+	| "anchor"
+	| "selected_by"
+	| "last_edited_by"
+>;
 
 const vMsgJoin = v.object({
 	type: v.literal("join"),
@@ -136,6 +147,11 @@ const vMsgCanvasResponse = v.object({
 	canvas: v.number(),
 	elements: v.array(vElement)
 });
+const vMsgElementsChanged = v.object({
+	type: v.literal("elements_changed"),
+	elements: v.array(vElement),
+	deleted_elements: v.array(vUuid)
+});
 const vMsg = v.variant("type", [
 	vMsgJoin,
 	vMsgOnJoin,
@@ -143,10 +159,16 @@ const vMsg = v.variant("type", [
 	vMsgUserChange,
 	vMsgSelection,
 	vMsgSelectionResponse,
-	vMsgCanvasResponse
+	vMsgCanvasResponse,
+	vMsgElementsChanged
 ]);
 
-type Command = { id?: string } & (SelectCommand | AccessLevelAdjustmentCommand | CanvasCommand);
+type Command = { id?: string } & (
+	| SelectCommand
+	| AccessLevelAdjustmentCommand
+	| CanvasCommand
+	| ChangedElementsCommand
+);
 type SelectCommand = {
 	type: "selection";
 	elements: Array<string>;
@@ -159,6 +181,11 @@ type AccessLevelAdjustmentCommand = {
 type CanvasCommand = {
 	type: "canvas";
 	canvas: number;
+};
+type ChangedElementsCommand = {
+	type: "changed_elements";
+	elements: Array<Element>;
+	deleted_elements: Array<string>;
 };
 const commandResponse = {
 	selection(_) {
@@ -182,6 +209,14 @@ const commandResponse = {
 			data: vMsgCanvasResponse,
 			error: v.object({
 				code: v.picklist(["room_does_not_exist"])
+			})
+		};
+	},
+	changed_elements(_) {
+		return {
+			data: vMsgElementsChanged,
+			error: v.object({
+				code: v.picklist(["no_permission", "room_does_not_exist"])
 			})
 		};
 	}
@@ -215,6 +250,12 @@ function canAcceptKeyboardEvents(e: KeyboardEvent) {
 		(e.target as HTMLElement).nodeName.toLowerCase() !== "input"
 	);
 }
+
+type UpdateableState<T> = {
+	update(data: T): void;
+	finish(): void;
+};
+type UpdateableElement = Partial<Element> & { uuid: string };
 
 type EditorEvent = {
 	"context-menu-open": [{ x: number; y: number }];
@@ -279,7 +320,10 @@ export class Editor {
 	}
 
 	elements = $state<Record<string, Element>>({});
+	history = new ElementHistory(this);
 	room = new RoomCollab(this);
+
+	movementHistoryEntry: UpdateableState<Array<UpdateableElement>> | undefined;
 
 	constructor(conf: Conf) {
 		this.conf = conf;
@@ -404,9 +448,7 @@ export class Editor {
 		} else if (e.code === "KeyV" && e.ctrlKey) {
 			navigator.clipboard.readText().then((text) => {
 				const arr = JSON.parse(text);
-				for (const item of arr) {
-					this.addElement(item);
-				}
+				this.addElements(arr);
 			});
 			e.preventDefault();
 			e.stopImmediatePropagation();
@@ -415,6 +457,15 @@ export class Editor {
 			for (const el of Object.values(this.elements)) {
 				if (this.isElementSelectable(el)) this.selectElement(el.uuid);
 			}
+			e.preventDefault();
+			e.stopImmediatePropagation();
+		} else if ((e.code === "KeyY" && e.ctrlKey) || (e.code === "KeyZ" && e.ctrlKey && e.shiftKey)) {
+			console.trace("Reapply");
+			this.history.reapply();
+			e.preventDefault();
+			e.stopImmediatePropagation();
+		} else if (e.code === "KeyZ" && e.ctrlKey) {
+			this.history.revert();
 			e.preventDefault();
 			e.stopImmediatePropagation();
 		}
@@ -453,16 +504,30 @@ export class Editor {
 					if (!this.isOnlyElementSelected(id)) {
 						this.mayBeDraggingSelectedElements = !e.ctrlKey;
 					}
+					if (this.mayBeDraggingSelectedElements) {
+						this.movementHistoryEntry = this.startUpdatingElements();
+					} else {
+						this.movementHistoryEntry?.finish();
+						this.movementHistoryEntry = undefined;
+					}
 					return;
 				}
 
-				if (!e.ctrlKey) {
+				if (!e.ctrlKey && !target.dataset["move"]) {
 					this.deselectAllElements();
 				}
 				this.selectElement(id);
 				this.mayBeDraggingSelectedElements = !e.ctrlKey;
+				if (this.mayBeDraggingSelectedElements) {
+					this.movementHistoryEntry = this.startUpdatingElements();
+				} else {
+					this.movementHistoryEntry?.finish();
+					this.movementHistoryEntry = undefined;
+				}
 			} else {
 				this.mayBeDraggingSelectedElements = false;
+				this.movementHistoryEntry?.finish();
+				this.movementHistoryEntry = undefined;
 			}
 		} else if (e.button === 1) {
 			this.isPanning = true;
@@ -487,15 +552,21 @@ export class Editor {
 				this.offsetY.animated - e.movementY / this.zoom.animated
 			);
 		} else if (this.mayBeDraggingSelectedElements) {
-			this.selected.forEach((id) => {
-				const el = this.getElement(id);
-				if (!el) return;
+			this.movementHistoryEntry?.update([
+				...this.selected
+					.values()
+					.map((id) => {
+						const el = this.getElement(id);
+						if (!el) return;
 
-				this.updateElement(id, {
-					x: el.x + e.movementX / this.zoom.animated,
-					y: el.y + e.movementY / this.zoom.animated
-				});
-			});
+						return {
+							uuid: id,
+							x: el.x + e.movementX / this.zoom.animated,
+							y: el.y + e.movementY / this.zoom.animated
+						};
+					})
+					.filter((v) => v !== undefined)
+			]);
 		}
 
 		this.mouseScreenX = e.clientX;
@@ -544,6 +615,8 @@ export class Editor {
 			// Stop user from panning if no longer holding space or left mouse
 			this.isPanning = false;
 			this.mayBeDraggingSelectedElements = false;
+			this.movementHistoryEntry?.finish();
+			this.movementHistoryEntry = undefined;
 		} else if (e.button === 1) {
 			this.isPanning = false;
 		}
@@ -660,23 +733,23 @@ export class Editor {
 		return this.selected.has(id) && this.selected.size === 1;
 	}
 	selectElement(id: string) {
-		if (!this.elements[id] || this.selected.has(id) || this.room.accessLevel === "view") return;
-		this.selected.add(id);
-		this.room.onSelectedElementsChange([...this.selected]);
+		if (
+			!this.elements[id] ||
+			this.selected.has(id) ||
+			(this.room.accessLevel === "view" && !this.getElement(id)?.tags.has(NO_SYNC_TAG))
+		)
+			return;
+		this.history.apply(new UpdateSelectionHistoryEntry({ newlySelected: [id] }));
 	}
 	deselectElement(id: string) {
 		if (!this.selected.has(id)) return;
-		this.selected.delete(id);
-		this.room.onSelectedElementsChange([...this.selected]);
+		this.history.apply(new UpdateSelectionHistoryEntry({ newlyDeselected: [id] }));
 	}
 	deselectAllElements() {
 		if (this.selected.size === 0) return;
-		this.selected.clear();
-		this.room.onSelectedElementsChange([]);
+		this.history.apply(new UpdateSelectionHistoryEntry({ newlyDeselected: [...this.selected] }));
 	}
-	isEditable(ids: Array<string>): boolean {
-		if (this.room.accessLevel === "view") return false;
-
+	isEditable(ids: Array<string>, allowEditingLocked = false): boolean {
 		// For each ID, check if it is selected by someone other than this user
 		for (const id of ids) {
 			const el = this.getElement(id);
@@ -685,54 +758,33 @@ export class Editor {
 			if (el.selected_by !== null && el.selected_by !== this.room.userUuid) {
 				return false;
 			}
+			// Make sure its not locked
+			if (el.tags.has(LOCKED_TAG) && !allowEditingLocked) {
+				return false;
+			}
+			// Make sure if the user isn't allowed to edit on the server then
+			// the element is entirely local
+			if (this.room.accessLevel === "view" && !el.tags.has(NO_SYNC_TAG)) {
+				return false;
+			}
 		}
 		return true;
 	}
 
 	queuedFocus = $state<string>();
 
-	/** Adds an element to the canvas.
+	/** Adds elements to the canvas.
 	 *
-	 *  Returns the ID of the newly-added element.
+	 *  Returns the ID of the newly-added elements.
 	 */
-	addElement(
-		el: OptionalKeys<
-			Element,
-			| "uuid"
-			| "scale_rate"
-			| "z_index"
-			| "rotation"
-			| "tags"
-			| "anchor"
-			| "selected_by"
-			| "last_edited_by"
-		>
-	): string {
-		const elementAdded: Element = {
-			uuid: uuid(),
-			scale_rate: "base",
-			z_index: Object.values(this.elements).reduce((p, c) => Math.max(p, c.z_index), 0),
-			tags: new SvelteSet(),
-			anchor: {
-				top: 0.5,
-				left: 0.5
-			},
-			rotation: 0,
-			last_edited_by: this.room.userUuid,
-			selected_by: null,
-			...el
-		};
-		this.elements[elementAdded.uuid] = elementAdded;
-
-		this.deselectAllElements();
-		if (this.isElementSelectable(elementAdded)) {
-			this.selectElement(elementAdded.uuid);
-			this.queuedFocus = elementAdded.uuid;
+	addElements(elements: Array<PartialElement>, createHistoryEntry = true): Array<string> {
+		const entry = new AddElementsHistoryEntry(elements);
+		if (createHistoryEntry) {
+			this.history.apply(entry);
 		} else {
-			this.queuedFocus = undefined;
+			entry.apply(this);
 		}
-
-		return elementAdded.uuid;
+		return entry.getUuids()!;
 	}
 
 	/** Retrieves information about an element. */
@@ -756,28 +808,60 @@ export class Editor {
 	}
 
 	/** Updates an element by its ID */
-	updateElement(id: string, data: Partial<Omit<Element, "uuid">>) {
-		if (id in this.elements) {
-			this.elements[id] = {
-				...this.elements[id],
-				...data
-			};
+	updateElements(data: Array<UpdateableElement>, createHistoryEntry = true) {
+		const historyEntry = new UpdateElementsHistoryEntry(data);
+		if (createHistoryEntry) {
+			this.history.apply(historyEntry);
+		} else {
+			historyEntry.apply(this);
 		}
+	}
+	/** Updates elements without committing them to history, until the
+	 *  `finish` function is called.
+	 */
+	startUpdatingElements(): UpdateableState<Array<UpdateableElement>> {
+		const history = new ProgressiveUpdateElementsHistoryEntry();
+		let applied = false;
+
+		const update = (data: Array<UpdateableElement>) => {
+			if (applied) {
+				throw new Error("Trying to update elements when state is already committed to history.");
+			}
+			history.update(this, data);
+		};
+
+		const finish = () => {
+			if (!applied && Object.entries(history.elementsAfterUpdate).length > 0) {
+				applied = true;
+				this.history.apply(history);
+			}
+		};
+
+		return {
+			update,
+			finish
+		};
 	}
 
 	/** Deletes an element by its ID */
-	deleteElement(id: string) {
-		delete this.elements[id];
+	deleteElement(id: string, createHistoryEntry = true) {
 		this.deselectElement(id);
+		const historyEntry = new DeleteElementsHistoryEntry([id]);
+		if (createHistoryEntry) {
+			this.history.apply(historyEntry);
+		} else {
+			historyEntry.apply(this);
+		}
 	}
 
 	/** Checks if an element is allowed to be selected. */
 	isElementSelectable(element: string | Element) {
-		if (this.room.accessLevel === "view") return false;
-
 		const el = typeof element === "string" ? this.getElement(element) : element;
 		return (
-			el && !el.tags.has(LOCKED_TAG) && (!el.selected_by || el.selected_by === this.room.userUuid)
+			el &&
+			!el.tags.has(LOCKED_TAG) &&
+			(!el.selected_by || el.selected_by === this.room.userUuid) &&
+			(this.room.accessLevel !== "view" || el.tags.has(NO_SYNC_TAG))
 		);
 	}
 
@@ -1242,17 +1326,33 @@ export class RoomCollab {
 			this.onUsersSelection(msg);
 		} else if (msg.type === "canvas_response") {
 			this.onCanvasResponse(msg);
+		} else if (msg.type === "elements_changed") {
+			this.onElementsChanged(msg);
 		} else {
 			unreachable(msg);
 		}
 	}
 	onJoin(msg: v.InferOutput<typeof vMsgOnJoin>) {
+		const prevUuid = this.userUuid;
 		this.userUuid = msg.user.uuid;
 		this.users = msg.users;
 		for (const [id, el] of Object.entries(this.editor.elements)) {
 			// Delete all elements not marked as NO_SYNC
 			if (!el.tags.has(NO_SYNC_TAG)) {
 				delete this.editor.elements[id];
+			}
+			// For the remaining elements, update all instances of the old UUID
+			// to the new UUID
+			if (this.editor.elements[id].last_edited_by === prevUuid) {
+				this.editor.elements[id].last_edited_by = msg.user.uuid;
+			} else {
+				this.editor.elements[id].last_edited_by = null;
+			}
+
+			if (this.editor.elements[id].selected_by === prevUuid) {
+				this.editor.elements[id].selected_by = msg.user.uuid;
+			} else {
+				this.editor.elements[id].selected_by = null;
 			}
 		}
 		for (const el of msg.elements) {
@@ -1290,12 +1390,14 @@ export class RoomCollab {
 		msg: v.InferOutput<typeof vMsgSelection> | v.InferOutput<typeof vMsgSelectionResponse>
 	) {
 		for (const selectedElId of msg.newly_selected) {
+			if (this.editor.elements[selectedElId] === undefined) continue;
 			this.editor.elements[selectedElId].selected_by = msg.user_uuid;
 			if (this.editor.selected.has(selectedElId) && msg.user_uuid !== this.userUuid) {
 				this.editor.selected.delete(selectedElId);
 			}
 		}
 		for (const deselectedElId of msg.newly_deselected) {
+			if (this.editor.elements[deselectedElId] === undefined) continue;
 			if (this.editor.elements[deselectedElId].selected_by === msg.user_uuid) {
 				this.editor.elements[deselectedElId].selected_by = null;
 			}
@@ -1333,6 +1435,14 @@ export class RoomCollab {
 		}
 		this.#isSwitchingCanvas = false;
 	}
+	onElementsChanged(msg: v.InferOutput<typeof vMsgElementsChanged>) {
+		for (const deleted of msg.deleted_elements) {
+			delete this.editor.elements[deleted];
+		}
+		for (const changed of msg.elements) {
+			this.editor.elements[changed.uuid] = changed;
+		}
+	}
 
 	/** Sends a command to the server.
 	 *
@@ -1347,7 +1457,13 @@ export class RoomCollab {
 	): Promise<C["id"] extends string ? CommandResponse<C["type"]> | undefined : void> {
 		if (!this.isConnectionOpen() || !this.conn) return;
 
-		this.conn.send(JSON.stringify(json));
+		this.conn.send(
+			JSON.stringify(json, (_, v) => {
+				if (v instanceof Set) return [...v.values()];
+				if (v instanceof Color) return v.rgb;
+				return v;
+			})
+		);
 
 		if (json.id) {
 			const resp = await this.awaitId(json.id);
@@ -1459,5 +1575,541 @@ export class RoomCollab {
 			const existingCallbacks = this.awaitIdCallbacks.get(id);
 			this.awaitIdCallbacks.set(id, [...(existingCallbacks ?? []), res]);
 		});
+	}
+}
+
+class ElementHistory {
+	historyEntries: Array<HistoryEntry> = [];
+	index: number = -1;
+
+	constructor(private editor: Editor) {}
+
+	apply(entry: HistoryEntry) {
+		this.historyEntries.splice(this.index + 1);
+		this.historyEntries.push(entry);
+
+		const preChangeSelectedElements = new Set(this.editor.selected);
+		const result = entry.apply(this.editor);
+		if (result !== "fail") {
+			this.syncState({
+				preChangeSelectedElements,
+				...result
+			});
+			return entry;
+		}
+
+		this.index = this.historyEntries.length - 1;
+	}
+	revert(): HistoryEntry | undefined {
+		// Keep reverting until something doesn't fail
+		const preChangeSelectedElements = new Set(this.editor.selected);
+		while (this.index > -1) {
+			const entry = this.historyEntries.at(this.index);
+			if (entry === undefined) {
+				throw new Error(`No entry: ${this.index}/${this.historyEntries.length}`);
+			}
+			this.index--;
+
+			const result = entry.revert(this.editor);
+			if (result !== "fail") {
+				this.syncState({
+					preChangeSelectedElements,
+					...result
+				});
+				return entry;
+			}
+		}
+
+		// Nothing left to revert
+		this.syncState({
+			preChangeSelectedElements
+		});
+		return undefined;
+	}
+	reapply(): boolean {
+		// Keep reapplying until something doesn't fail.
+		const preChangeSelectedElements = new Set(this.editor.selected);
+		while (this.index < this.historyEntries.length) {
+			const entry = this.historyEntries.at(this.index);
+			if (entry === undefined) {
+				throw new Error(`No entry: ${this.index}/${this.historyEntries.length}`);
+			}
+			this.index++;
+			console.log("Reapplying ", entry.constructor.name);
+
+			const result = entry.apply(this.editor);
+			if (result !== "fail") {
+				this.syncState({
+					preChangeSelectedElements,
+					...result
+				});
+				return true;
+			}
+		}
+
+		// Nothing left to reapply
+		this.syncState({
+			preChangeSelectedElements
+		});
+		return false;
+	}
+
+	syncState(changes: HistoryStateChanges) {
+		// Check if theres any differences in the selected elements
+		if (
+			changes.preChangeSelectedElements &&
+			changes.preChangeSelectedElements.symmetricDifference(this.editor.selected).size > 0
+		) {
+			this.editor.room.onSelectedElementsChange([...this.editor.selected]);
+		}
+
+		// Announce changes to elements
+		if (changes.createdOrModifiedElements || changes.deletedElements) {
+			this.editor.room.send({
+				type: "changed_elements",
+				elements: changes.createdOrModifiedElements ?? [],
+				deleted_elements: changes.deletedElements ?? []
+			});
+		}
+	}
+}
+
+type HistoryActions = {
+	createdOrModifiedElements?: Array<Element>;
+	deletedElements?: Array<string>;
+};
+type HistoryStateChanges = HistoryActions & {
+	preChangeSelectedElements?: Set<string>;
+};
+
+abstract class HistoryEntry {
+	entry: string;
+	constructor() {
+		this.entry = uuid();
+	}
+
+	abstract apply(editor: Editor): HistoryActions | "fail";
+	abstract revert(editor: Editor): HistoryActions | "fail";
+}
+
+class UpdateSelectionHistoryEntry extends HistoryEntry {
+	constructor(
+		private selections: {
+			newlySelected?: Array<string>;
+			newlyDeselected?: Array<string>;
+		}
+	) {
+		super();
+	}
+
+	apply(editor: Editor): HistoryActions | "fail" {
+		if (editor.room.accessLevel === "view") return "fail";
+
+		let nothingHappened = true;
+		this.selections.newlySelected?.forEach((id) => {
+			if (!editor.elements[id] || editor.selected.has(id)) return;
+			editor.selected.add(id);
+			nothingHappened = false;
+		});
+		this.selections.newlyDeselected?.forEach((id) => {
+			if (!editor.selected.has(id)) return;
+			editor.selected.delete(id);
+			if (editor.elements[id]) {
+				nothingHappened = false;
+			}
+		});
+		if (nothingHappened) return "fail";
+
+		return {};
+	}
+	revert(editor: Editor): HistoryActions | "fail" {
+		if (editor.room.accessLevel === "view") return "fail";
+
+		let nothingHappened = true;
+		this.selections.newlySelected?.forEach((id) => {
+			if (!editor.selected.has(id)) return;
+			editor.selected.delete(id);
+			if (editor.elements[id]) {
+				nothingHappened = false;
+			}
+		});
+		this.selections.newlyDeselected?.forEach((id) => {
+			if (!editor.elements[id] || editor.selected.has(id)) return;
+			editor.selected.add(id);
+			nothingHappened = false;
+		});
+		if (nothingHappened) return "fail";
+
+		return {};
+	}
+}
+
+class AddElementsHistoryEntry extends HistoryEntry {
+	private elements: Array<Element> | undefined;
+	/** Elements that got deselected when applying the entry. */
+	private deselectedElements: Iterable<string> = [];
+	private isRedoing = false;
+
+	constructor(private rawElements: Array<PartialElement>) {
+		super();
+	}
+
+	getUuids() {
+		return this.elements?.map(({ uuid }) => uuid);
+	}
+
+	apply(editor: Editor) {
+		if (this.elements === undefined) {
+			this.elements = this.rawElements.map((el): Element => {
+				return {
+					uuid: uuid(),
+					scale_rate: "base",
+					z_index: Object.values(editor.elements).reduce((p, c) => Math.max(p, c.z_index), 0),
+					tags: new SvelteSet(),
+					anchor: {
+						top: 0.5,
+						left: 0.5
+					},
+					rotation: 0,
+					last_edited_by: editor.room.userUuid,
+					selected_by: null,
+					...el
+				};
+			});
+		} else {
+			this.elements = this.elements.map((el): Element => {
+				// Element with this ID already exists
+				if (editor.getElement(el.uuid)) {
+					throw new Error("Element with uuid already exists");
+				}
+
+				return {
+					...el,
+					last_edited_by: editor.room.userUuid,
+					selected_by: null
+				};
+			});
+		}
+
+		let nothingHappened = true;
+		// Select the new elements.
+		this.deselectedElements = editor.selected;
+		editor.selected.clear();
+		for (const element of this.elements) {
+			if (editor.room.accessLevel !== "view" || element.tags.has(NO_SYNC_TAG)) {
+				editor.elements[element.uuid] = element;
+				if (editor.isElementSelectable(element) && !editor.selected.has(element.uuid)) {
+					editor.selected.add(element.uuid);
+				}
+				nothingHappened = false;
+			}
+		}
+		if (nothingHappened) {
+			for (const v of this.deselectedElements) {
+				editor.selected.add(v);
+			}
+			return "fail";
+		}
+
+		if (
+			this.elements.length === 1 &&
+			editor.isElementSelectable(this.elements[0]) &&
+			!this.isRedoing
+		) {
+			editor.queuedFocus = this.elements[0].uuid;
+		} else {
+			editor.queuedFocus = undefined;
+		}
+
+		return {
+			createdOrModifiedElements: this.elements.filter((el) => !el.tags.has(NO_SYNC_TAG))
+		};
+	}
+
+	revert(editor: Editor) {
+		this.isRedoing = true;
+		if (this.elements === undefined) return "fail";
+
+		// Delete all the elements if this user was the last to edit them.
+		let nothingHappened = true;
+
+		editor.selected.clear();
+		for (const reselectingUuid of this.deselectedElements) {
+			if (editor.isElementSelectable(reselectingUuid) && !editor.selected.has(reselectingUuid)) {
+				editor.selected.add(reselectingUuid);
+				nothingHappened = false;
+			}
+		}
+
+		const gotDeleted = [];
+		for (const element of this.elements) {
+			const el = editor.getElement(element.uuid);
+			if (
+				!el ||
+				el.last_edited_by !== editor.room.userUuid ||
+				(editor.room.accessLevel === "view" && !element.tags.has(NO_SYNC_TAG))
+			) {
+				continue;
+			}
+
+			delete editor.elements[element.uuid];
+			if (!el.tags.has(NO_SYNC_TAG)) {
+				gotDeleted.push(element.uuid);
+			}
+			nothingHappened = false;
+		}
+		this.deselectedElements = [];
+
+		if (nothingHappened) return "fail";
+
+		return {
+			deletedElements: gotDeleted
+		};
+	}
+}
+
+class UpdateElementsHistoryEntry extends HistoryEntry {
+	beforeUpdates: Array<Element> | undefined;
+
+	constructor(private updates: Array<UpdateableElement>) {
+		super();
+	}
+
+	apply(editor: Editor) {
+		this.beforeUpdates = [];
+		const elements = this.updates
+			.map((el): Element | undefined => {
+				const current = editor.getElement(el.uuid);
+				if (current === undefined) {
+					return undefined;
+				}
+				if (!editor.isEditable([el.uuid], true)) {
+					return undefined;
+				}
+
+				this.beforeUpdates!.push(current);
+				return {
+					...current,
+					...el,
+					last_edited_by: editor.room.userUuid
+				};
+			})
+			.filter((x) => x !== undefined);
+
+		if (elements.length === 0) {
+			return "fail";
+		}
+
+		let nothingHappened = true;
+		for (const element of elements) {
+			if (editor.room.accessLevel !== "view" || element.tags.has(NO_SYNC_TAG)) {
+				editor.elements[element.uuid] = element;
+				nothingHappened = false;
+			}
+		}
+		if (nothingHappened) return "fail";
+
+		return {
+			createdOrModifiedElements: elements.filter((el) => !el.tags.has(NO_SYNC_TAG))
+		};
+	}
+
+	revert(editor: Editor) {
+		if (this.beforeUpdates === undefined) return "fail";
+
+		// Revert all the elements if this user was the last to edit them.
+		let nothingHappened = true;
+
+		const updated = [];
+		for (const element of this.beforeUpdates) {
+			const el = editor.getElement(element.uuid);
+			if (
+				!el ||
+				el.last_edited_by !== editor.room.userUuid ||
+				(editor.room.accessLevel === "view" && !element.tags.has(NO_SYNC_TAG))
+			) {
+				continue;
+			}
+
+			editor.elements[element.uuid] = element;
+			if (!el.tags.has(NO_SYNC_TAG)) {
+				updated.push(element);
+			}
+			nothingHappened = false;
+		}
+		this.beforeUpdates = undefined;
+
+		if (nothingHappened) return "fail";
+
+		return {
+			createdOrModifiedElements: updated
+		};
+	}
+}
+
+class ProgressiveUpdateElementsHistoryEntry extends HistoryEntry {
+	elementsBeforeUpdate: Record<string, Element> = {};
+	elementsAfterUpdate: Record<string, Element> = {};
+
+	constructor() {
+		super();
+	}
+
+	update(editor: Editor, updates: Array<UpdateableElement>) {
+		const elements = updates
+			.map((el): Element | undefined => {
+				const current = editor.getElement(el.uuid);
+				if (current === undefined) {
+					return undefined;
+				}
+				if (!editor.isEditable([el.uuid], true)) {
+					return undefined;
+				}
+
+				if (!(el.uuid in this.elementsBeforeUpdate)) {
+					this.elementsBeforeUpdate[el.uuid] = current;
+				}
+
+				return {
+					...current,
+					...el,
+					last_edited_by: editor.room.userUuid
+				};
+			})
+			.filter((x) => x !== undefined);
+
+		for (const element of elements) {
+			if (editor.room.accessLevel !== "view" || element.tags.has(NO_SYNC_TAG)) {
+				editor.elements[element.uuid] = element;
+				this.elementsAfterUpdate[element.uuid] = element;
+			}
+		}
+	}
+
+	apply(editor: Editor) {
+		const elements = Object.values(this.elementsAfterUpdate)
+			.map((el): Element | undefined => {
+				const current = editor.getElement(el.uuid);
+				if (current === undefined) {
+					return undefined;
+				}
+				if (!editor.isEditable([el.uuid], true)) {
+					return undefined;
+				}
+
+				return {
+					...current,
+					...el,
+					last_edited_by: editor.room.userUuid
+				};
+			})
+			.filter((x) => x !== undefined);
+
+		if (elements.length === 0) {
+			return "fail";
+		}
+
+		let nothingHappened = true;
+		for (const element of elements) {
+			if (editor.room.accessLevel !== "view" || element.tags.has(NO_SYNC_TAG)) {
+				editor.elements[element.uuid] = element;
+				nothingHappened = false;
+			}
+		}
+		if (nothingHappened) return "fail";
+
+		return {
+			createdOrModifiedElements: elements.filter((el) => !el.tags.has(NO_SYNC_TAG))
+		};
+	}
+
+	revert(editor: Editor) {
+		// Revert all the elements if this user was the last to edit them.
+		let nothingHappened = true;
+
+		const updated = [];
+		for (const element of Object.values(this.elementsBeforeUpdate)) {
+			const el = editor.getElement(element.uuid);
+			if (
+				!el ||
+				el.last_edited_by !== editor.room.userUuid ||
+				(editor.room.accessLevel === "view" && !element.tags.has(NO_SYNC_TAG))
+			) {
+				continue;
+			}
+
+			editor.elements[element.uuid] = element;
+			if (!el.tags.has(NO_SYNC_TAG)) {
+				updated.push(element);
+			}
+			nothingHappened = false;
+		}
+
+		if (nothingHappened) return "fail";
+
+		return {
+			createdOrModifiedElements: updated
+		};
+	}
+}
+
+class DeleteElementsHistoryEntry extends HistoryEntry {
+	private elements: Array<Element> | undefined;
+
+	constructor(private uuids: Array<string>) {
+		super();
+	}
+
+	apply(editor: Editor) {
+		let nothingHappened = true;
+		this.elements = [];
+		for (const id of this.uuids) {
+			const el = editor.getElement(id);
+			if (el && (editor.room.accessLevel !== "view" || el.tags.has(NO_SYNC_TAG))) {
+				this.elements.push(el);
+				delete editor.elements[id];
+				nothingHappened = false;
+			}
+		}
+		if (nothingHappened) {
+			return "fail";
+		}
+
+		return {
+			deletedElements: this.elements
+				.filter((el) => !el.tags.has(NO_SYNC_TAG))
+				.map(({ uuid }) => uuid)
+		};
+	}
+
+	revert(editor: Editor) {
+		if (this.elements === undefined) return "fail";
+
+		// Delete all the elements if this user was the last to edit them.
+		let nothingHappened = true;
+
+		const reAdded = [];
+		for (const element of this.elements) {
+			if (editor.room.accessLevel === "view" && !element.tags.has(NO_SYNC_TAG)) {
+				continue;
+			}
+
+			editor.elements[element.uuid] = {
+				...element,
+				selected_by: null,
+				last_edited_by: editor.room.userUuid
+			};
+			if (!element.tags.has(NO_SYNC_TAG)) {
+				reAdded.push(element);
+			}
+			nothingHappened = false;
+		}
+		this.elements = [];
+
+		if (nothingHappened) return "fail";
+
+		return {
+			createdOrModifiedElements: reAdded
+		};
 	}
 }
