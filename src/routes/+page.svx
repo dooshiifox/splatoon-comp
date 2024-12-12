@@ -1,0 +1,10 @@
+---
+title: Competitive Splatoon 3
+description: A hub for competitive Splatoon 3 content.
+---
+
+If you are looking for the planner, [click here](/planner).
+
+### Entries
+
+- [Divisions and Tournaments](/divs-and-tournaments)

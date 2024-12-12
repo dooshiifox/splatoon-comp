@@ -1,3 +1,8 @@
+---
+title: Todo
+description: List of planned features for the Competitive Splatoon 3 Planner
+---
+
 The following is a list of to-do items for the planner feature. They are not placed in any particular order and will be done whenever i feel like adding them.
 
 Contributions on [GitHub](https://github.com/dooshiifox/splatoon-comp) would be greatly appreciated. If you want to contact me for feature requests or bug reporting or something else, the [GitHub issues tab](https://github.com/dooshiifox/splatoon-comp/issues), my [Bluesky](https://bsky.app/profile/dooshii.dev), or my Discord (@dooshii) is the best way to do this.

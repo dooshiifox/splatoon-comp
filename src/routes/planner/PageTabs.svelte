@@ -250,7 +250,7 @@
 			{#if tabs.isSelected("Help")}
 				<div class="px-6 py-2">
 					<p class="mx-auto mb-2 w-fit text-base text-gray-200">
-						In Alpha. <A href="/planner/todo">View To-Do list</A>
+						In Alpha. <A href="+/planner/todo">View To-Do list</A>
 					</p>
 					<div class="flex flex-row items-center justify-center *:shrink-0">
 						<a
