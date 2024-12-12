@@ -9,6 +9,9 @@ export default {
 			fontFamily: {
 				"splatoon-text": "SplatoonText",
 				"splatoon-block": "SplatoonBlock"
+			},
+			scrollMargin: {
+				sensical: "clamp(50px,calc(20vh - 100px),200px)"
 			}
 		}
 	},

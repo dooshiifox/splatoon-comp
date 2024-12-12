@@ -1,0 +1,53 @@
+---
+title: Divisions and Tournaments
+description: An introductory guide to divisions and tournaments in Splatoon 3
+last_edited: Dec 12 2024 17:00 UTC+13
+---
+
+# Divisions and Tournaments
+
+Tournaments are at the heart of competitive Splatoon. Understanding how they operate, how to participate, and how to improve in them is vital for being in the competitive scene.
+
+## Contents
+
+## Divisions
+
+The Splatoon community has, for many years, split itself into divisions based on skill levels. Many tournaments limit participation to players or teams within these divisions, so that players only verse others at their skill level.
+
+The most commonly-seen division system are [LUTI](#luti) divisions. LUTI groups players into 11 divisions, from div X down to div 10. When starting out in competitive, you'll likely be on the lower end of this scale, around div 9 or 10. As you improve, you'll start climbing up the scale! You can get officially placed into a division with your team by the LUTI seeding council, where they base your division off your recent results, however this is infrequent (only when they run a tournament) and estimating your division is acceptable to most.
+
+> You may notice that the lower 4 divisions are subdivided into A and W (i.e., 7A, 7W, 8A, 8W, 9A, 9W, 10A, 10W). This splits divisions into **A**mericas and **W**orld, and is only used for LUTI to make it easier to organise match times. Both A and W are the same skill level.
+
+### Other division systems
+
+Other division systems exist. For example, the OCE division system for the Oceania region has divisions 1 to 5, where OCE div 3 corresponds to approximately LUTI div 8. This is due to the relatively smaller-scale Oceania region compared to JP or USA.
+
+If you say your division without specifying the division system, most people will assume LUTI. Different division systems are rare.
+
+## Tournaments
+
+The Splatoon community holds [multiple tournaments daily](https://sendou.ink/calendar?tournaments=true), meaning you'll have no shortage of matches to play should you want to. That being said, some tournaments are more prominent than others, and learning them may be helpful.
+
+### Leagues Under The Ink
+
+### SendouQ
+
+##### Example
+
+#### Something else
+
+##### Hi!
+
+### From The Ink Up
+
+### Low Ink
+
+### Junior's Draft
+
+### Swim or Sink
+
+## Seeding
+
+## When To Go Competitive?
+
+## How To Go Competitive?
