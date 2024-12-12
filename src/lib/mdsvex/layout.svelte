@@ -43,8 +43,6 @@
 	} & Record<string, unknown>;
 	let { children, toc, title, description, author, last_edited, image, ...props }: Props = $props();
 
-	console.log(toc);
-
 	let currentSection = $state(toc?.children[0].slug ?? "");
 	tocContext.set({
 		get contents() {
@@ -63,7 +61,7 @@
 		const observer = new IntersectionObserver(
 			(entries) => {
 				entries.forEach((entry) => {
-					const id = entry.target.getAttribute("id");
+					const id = (entry.target as HTMLElement).dataset.section;
 					if (entry.isIntersecting && id) {
 						currentSection = id;
 					}
@@ -74,14 +72,9 @@
 			}
 		);
 
-		function track(contents: Array<TableOfContentsEntry>) {
-			contents.forEach((v) => {
-				const el = document.querySelector(`#${v.slug}`);
-				if (el) observer.observe(el);
-				track(v.children);
-			});
+		for (const el of document.querySelectorAll(`[data-section]`)) {
+			observer.observe(el);
 		}
-		track(toc?.children ?? []);
 
 		return observer.disconnect;
 	});

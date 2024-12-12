@@ -22,7 +22,7 @@ will open in a new tab.
 	import type { Snippet } from "svelte";
 
 	type Props = { children: Snippet; href: string };
-	let { children, href }: Props = $props();
+	let { children, href, ...props }: Props = $props();
 
 	let externalLink = $derived(href[0] !== "#" && href[0] !== "/");
 </script>
@@ -32,6 +32,7 @@ will open in a new tab.
 	class:mr-4={externalLink}
 	href={href.startsWith("+") ? href.substring(1) : href}
 	target={externalLink ? "_blank" : "_self"}
+	{...props}
 	><span class="underline">{@render children()}</span>{#if externalLink}
 		<span class="relative">
 			<svg

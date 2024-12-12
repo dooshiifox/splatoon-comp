@@ -2,7 +2,7 @@
 	import type { Snippet } from "svelte";
 
 	type Props = { children: Snippet };
-	let { children }: Props = $props();
+	let { children, ...props }: Props = $props();
 </script>
 
-<ul class="list-disc">{@render children()}</ul>
+<ul class="list-disc" {...props}>{@render children()}</ul>

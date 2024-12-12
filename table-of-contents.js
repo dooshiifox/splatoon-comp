@@ -55,7 +55,20 @@ function remarkTocTree(root) {
 		const value = toString(node, { includeImageAlt: false });
 		/** @type {string} */
 		// @ts-expect-error `hProperties` from <https://github.com/syntax-tree/mdast-util-to-hast>
-		const id = node.data && node.data.hProperties && node.data.hProperties.id;
+		let id = node.data && node.data.hProperties && node.data.hProperties.id;
+		// If the first child is a linkReference with a hash (eg., [#my-id]),
+		// thats the ID to use for this element.
+		if (
+			!id &&
+			node.children[0]?.type === "linkReference" &&
+			node.children[0].label.startsWith("#")
+		) {
+			id = node.children[0].identifier.replace("#", "");
+			node.children.shift();
+			if (node.children[0]?.type === "text") {
+				node.children[0].value = node.children[0].value.trimStart();
+			}
+		}
 		const slug = slugs.slug(id || value);
 
 		if (!parents(parent)) {
@@ -169,38 +182,48 @@ function insert(entry, parent) {
 	}
 }
 
+/**
+ * @param {HastRoot} tree
+ */
+function rehypeTocTree(tree) {
+	// Find the '__META__.TocTop' element
+	/** @type {{ isOrdered: boolean; children: Array<TableEntry> } | undefined} */
+	let tocTop;
+	visit(tree, "element", function (node) {
+		if (node.tagName === "__META__.TocTop") {
+			tocTop = node.properties;
+		}
+	});
+
+	if (tocTop) {
+		visit(tree, "root", function (root) {
+			for (const child of root.children) {
+				// Find the child element that declares the layout
+				// and update its arguments to include the TOC data
+				if (child.type === "raw" && child.value.startsWith("<Layout_MDSVEX_")) {
+					child.value =
+						child.value.substring(0, child.value.indexOf(">")) +
+						` toc={${JSON.stringify(tocTop)}}>`;
+				}
+			}
+
+			root.children = root.children.filter((n) => n.tagName !== "__META__.TocTop");
+		});
+	}
+
+	let currentSection = "";
+	visit(tree, "element", function (element) {
+		if (/h[1-6]$/.test(element.tagName)) {
+			currentSection = element.properties.id;
+		}
+		element.properties["data-section"] = currentSection;
+	});
+}
+
 export function remarkToc() {
 	return remarkTocTree;
 }
 
 export function rehypeToc() {
-	/**
-	 * @param {HastRoot} tree
-	 */
-	return function (tree) {
-		// Find the '__META__.TocTop' element
-		/** @type {{ isOrdered: boolean; children: Array<TableEntry> } | undefined} */
-		let tocTop;
-		visit(tree, "element", function (node) {
-			if (node.tagName === "__META__.TocTop") {
-				tocTop = node.properties;
-			}
-		});
-
-		if (tocTop) {
-			visit(tree, "root", function (root) {
-				for (const child of root.children) {
-					// Find the child element that declares the layout
-					// and update its arguments to include the TOC data
-					if (child.type === "raw" && child.value.startsWith("<Layout_MDSVEX_")) {
-						child.value =
-							child.value.substring(0, child.value.indexOf(">")) +
-							` toc={${JSON.stringify(tocTop)}}>`;
-					}
-				}
-
-				root.children = root.children.filter((n) => n.tagName !== "__META__.TocTop");
-			});
-		}
-	};
+	return rehypeTocTree;
 }

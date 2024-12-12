@@ -28,21 +28,15 @@ If you say your division without specifying the division system, most people wil
 
 The Splatoon community holds [multiple tournaments daily](https://sendou.ink/calendar?tournaments=true), meaning you'll have no shortage of matches to play should you want to. That being said, some tournaments are more prominent than others, and learning them may be helpful.
 
-### Leagues Under The Ink
+### [#luti] Leagues Under The Ink
 
 ### SendouQ
 
-##### Example
-
-#### Something else
-
-##### Hi!
-
-### From The Ink Up
+### [#ftiu] From The Ink Up
 
 ### Low Ink
 
-### Junior's Draft
+### [#jrs-draft] Junior's Draft
 
 ### Swim or Sink
 

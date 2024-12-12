@@ -3,9 +3,10 @@
 	import { getTableOfContentsContext, type TableOfContentsEntry } from "./layout.svelte";
 
 	const toc = getTableOfContentsContext();
+	let props = $props();
 </script>
 
-<div class="lg:hidden">
+<div class="lg:hidden" {...props}>
 	{#if toc.contents}
 		<div class="w-fit max-w-full rounded-md bg-slate-800 py-2 shadow">
 			{#snippet items(contents: Array<TableOfContentsEntry>, indent: number = 0)}
